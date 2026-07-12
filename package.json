@@ -1,0 +1,65 @@
+{
+  "name": "@runravel/ravel",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Ravel — an agentic runtime: define an agentic team as a folder of agents, tools, and processes, and run it with orchestration, budgets, scheduling, and human-in-the-loop approval.",
+  "license": "Apache-2.0",
+  "author": "Oren Yagev",
+  "homepage": "https://runravel.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RunRavel/ravel.git"
+  },
+  "bugs": {
+    "url": "https://github.com/RunRavel/ravel/issues"
+  },
+  "keywords": [
+    "agents",
+    "ai",
+    "agentic",
+    "runtime",
+    "orchestration",
+    "claude",
+    "mcp",
+    "human-in-the-loop"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "ravel": "./bin/ravel.mjs"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "bin",
+    "examples",
+    "!**/.ravel",
+    "!**/.businessos",
+    "!**/.env",
+    "ui/dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "ravel": "tsx src/cli/main.ts",
+    "prepublishOnly": "cd ui && npm ci && npm run build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.0",
+    "chokidar": "^4.0.3",
+    "tsx": "^4.19.2",
+    "yaml": "^2.7.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.0"
+  }
+}

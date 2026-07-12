@@ -1,0 +1,10 @@
+{
+  "defaultPolicy": "ask",
+  "tools": [
+    { "name": "Read", "policy": "auto", "description": "Read the triage sheet and product docs from the shared workspace." },
+    { "name": "Write", "policy": "auto", "description": "Write response drafts and KB articles into the shared workspace." },
+    { "name": "Glob", "policy": "auto" },
+    { "name": "Grep", "policy": "auto" }
+  ],
+  "mcpServers": {}
+}

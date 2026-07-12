@@ -1,0 +1,10 @@
+{
+  "defaultPolicy": "ask",
+  "tools": [
+    { "name": "Read", "policy": "auto", "description": "Read the ticket batch from the shared workspace." },
+    { "name": "Write", "policy": "auto", "description": "Write the triage sheet into the shared workspace." },
+    { "name": "Glob", "policy": "auto" },
+    { "name": "Grep", "policy": "auto" }
+  ],
+  "mcpServers": {}
+}

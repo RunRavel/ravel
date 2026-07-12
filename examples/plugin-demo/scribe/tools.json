@@ -1,0 +1,9 @@
+{
+  "defaultPolicy": "ask",
+  "builtins": "none",
+  "tools": [
+    { "name": "note_append", "policy": "auto", "description": "Append a note to the team's shared notes (plugin tool)." },
+    { "name": "publish_note", "policy": "ask", "description": "Propose publishing a note externally — requires human approval (plugin gated tool)." }
+  ],
+  "mcpServers": {}
+}

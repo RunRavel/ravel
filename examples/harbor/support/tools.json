@@ -1,0 +1,16 @@
+{
+  "defaultPolicy": "ask",
+  "tools": [
+    {
+      "name": "release_responses",
+      "policy": "ask",
+      "description": "Send approved responses to customers via the helpdesk. Irreversible customer-facing action — always requires human approval."
+    },
+    {
+      "name": "helpdesk_read_queue",
+      "policy": "auto",
+      "description": "Read ticket queue status from the helpdesk system. Read-only."
+    }
+  ],
+  "mcpServers": {}
+}

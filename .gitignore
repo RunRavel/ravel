@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.tsbuildinfo
+*.log
+.env
+.env.local
+.DS_Store
+
+# Runtime state (agent working dirs, audit logs, queues) — created at runtime
+.ravel/
+.businessos/
+
+# Private planning docs (roadmap, platform asks) — kept local, never published
+docs/internal/

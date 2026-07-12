@@ -1,0 +1,11 @@
+{
+  "defaultPolicy": "ask",
+  "tools": [
+    {
+      "name": "send_email",
+      "policy": "ask",
+      "description": "Send an outbound email. Consequential and irreversible — always requires human approval."
+    }
+  ],
+  "mcpServers": {}
+}

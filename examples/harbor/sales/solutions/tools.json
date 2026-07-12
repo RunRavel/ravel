@@ -1,0 +1,16 @@
+{
+  "defaultPolicy": "ask",
+  "tools": [
+    {
+      "name": "send_proposal",
+      "policy": "ask",
+      "description": "Email a proposal/quote to a prospect. Consequential and externally visible — always requires human approval."
+    },
+    {
+      "name": "lookup_rate_card",
+      "policy": "auto",
+      "description": "Read Harbor's internal per-tier rate card. Read-only; safe to run automatically."
+    }
+  ],
+  "mcpServers": {}
+}
