@@ -45,7 +45,7 @@
   ],
   "scripts": {
     "ravel": "tsx src/cli/main.ts",
-    "prepublishOnly": "cd ui && npm ci && npm run build",
+    "prepare": "cd ui && npm ci && npm run build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
