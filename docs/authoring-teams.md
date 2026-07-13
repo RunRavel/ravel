@@ -191,3 +191,8 @@ Configure per process in the console (Org → process → **Automation**) or
 5. Cost-tier models: haiku for triage, sonnet for work, opus for orchestration.
 6. `ANTHROPIC_API_KEY` in the environment or a `.env`; then
    `ravel serve --dir .` and run a process from the console.
+
+See also: [cli-reference.md](./cli-reference.md) for every command/flag,
+[examples.md](./examples.md) for three complete teams to read or run, and
+[api-reference.md](./api-reference.md) for the plugin types this doc's
+`plugin.ts` example builds against.
