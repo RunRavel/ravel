@@ -81,10 +81,22 @@ An agent can only call what's granted here. Policy is the trust layer:
   The `.env` chain merges org-root → agent (deepest wins); a sibling's `.env` is
   unreachable — **key possession is the capability boundary** (e.g. give only the
   writer agent the write key).
+- **Declare expected env keys** in `env: ["KEY", ...]`. `validate`/`serve` then warn
+  if a declared key (or a `${KEY}` used in an mcpServers header) isn't found in the
+  `.env` chain or `process.env` — turning the old silent empty-`${KEY}` failure into
+  a visible warning. Declaration is the contract; declare what your tools rely on.
 
 Built-in tool families you can grant by name: the generic memory tools
 (`mem_text_get/set`, `mem_json_get/set/merge`, `mem_queue_append/list/clear`,
 `mem_keys`), office/file tools, and any tools your team plugin defines.
+
+**Prefer typed plugin tools over generic memory writes.** Granting a worker
+`mem_text_set`/`mem_json_set`/`mem_queue_append` (etc.) lets it write *any* key it
+invents — which drifts into inconsistent, unreadable memory sprawl over time. For
+durable domain state (a watchlist, a ledger), expose a **typed `plugin.ts` tool**
+that owns one canonical key, and grant that instead. `validate`/`serve` warn on
+generic memory-write grants for this reason. See
+[config-format.md](./config-format.md) for the full list of validation warnings.
 
 ## `processes/*.process.md` — playbooks
 

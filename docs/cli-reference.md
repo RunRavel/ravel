@@ -25,9 +25,13 @@ each file contains and why.
 
 ## `ravel validate [--dir <org>]`
 
-Compiles the folder tree (agent.md / tools.json / processes) against the zod
-schemas and reports diagnostics — no agents run. Exit code `0` on success,
-`1` with a `• where: message` line per problem. Safe to run in CI.
+Compiles the folder tree (agent.md / tools.json / processes / ravel.json)
+against the zod schemas and reports diagnostics — no agents run. Prints `✗`
+**errors** (malformed config, unresolved process owner) and `⚠` **warnings**
+(advisory lint — generic memory-write grants, missing/undeclared env, pinned
+`runtimeVersion` mismatch). Exit `1` if any error, `0` if only warnings (or
+clean). Safe to run in CI. See [config-format.md](./config-format.md) for the
+full warning list.
 
 ## `ravel run <process-name> [options]`
 

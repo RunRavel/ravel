@@ -3,9 +3,40 @@
 All notable changes to `@runravel/ravel`. The format follows
 [Keep a Changelog](https://keepachangelog.com); versions follow semver.
 
-## 0.1.0 — unreleased
+## 0.2.0 — unreleased
 
-First publishable version.
+Declarative config validation + config-format versioning.
+
+### Added
+
+- **Config lint** — advisory, non-fatal warnings surfaced at `ravel validate`
+  and at `serve` startup (as `config.warning` audit events):
+  - **Generic memory writes** (`mem_text_set`/`mem_json_set`/`mem_json_merge`/
+    `mem_queue_append`/`mem_queue_clear`) warn — prefer a typed `plugin.ts` tool
+    for durable domain data (guards against agent memory-key sprawl).
+  - **Env**: a declared `env` key missing from the `.env` chain/`process.env`,
+    or a `${KEY}` used in an mcpServers header but not declared, warns.
+  - **Unknown tool grant** (serve only): a grant naming no known tool is flagged
+    as dead (suppressed when the node declares an mcpServer).
+- **`tools.json` `env: []`** — declare the host env keys an agent expects, so the
+  linter can catch missing/undeclared keys (fixes the silent empty-`${KEY}` footgun).
+- **`ravel.json` `runtimeVersion` is now read and checked** — a warn-only semver
+  range check against the installed runtime (previously a dead field).
+- Public API: `TOOL_CATALOG`/`BUILTIN_TOOLS`/`isCatalogTool`/`isMemoryWriteTool`,
+  `lintRegistry`, `parseManifest`/`satisfiesRange`/`Manifest`, `runtimeVersion`,
+  and `Diagnostic` (now with an optional `severity`).
+
+### Changed
+
+- `Diagnostic` gains an optional `severity` (`"error" | "warning"`; absent =
+  error). Compilation still fails on any error; only explicit warnings are advisory.
+- See [docs/config-format.md](https://github.com/RunRavel/ravel/blob/main/docs/config-format.md)
+  for the declarative surface and its version history. All 0.2 additions are
+  additive — 0.1 teams validate unchanged.
+
+## 0.1.0 — 2026-07-13
+
+First public release.
 
 ### Added
 

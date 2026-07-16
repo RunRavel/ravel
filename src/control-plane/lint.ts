@@ -1,5 +1,7 @@
 import type { Diagnostic, RegistrySnapshot, RegistryNode } from "./registry.js";
 import { isMemoryWriteTool, isCatalogTool } from "../schemas/catalog.js";
+import { satisfiesRange } from "../schemas/manifest.js";
+import { runtimeVersion } from "../domain/version.js";
 import type { SecretStore } from "../secrets/store.js";
 
 /**
@@ -21,6 +23,11 @@ export interface LintContext {
    * plugin/MCP tool names can't be known statically.
    */
   pluginToolNamesByNode?: (nodeId: string) => string[];
+  /**
+   * Installed runtime version for the manifest `runtimeVersion` check. Defaults
+   * to the real installed version; overridable in tests.
+   */
+  installedVersion?: string;
 }
 
 /** Matches `${KEY}` references (same shape the SDK substitutes in headers). */
@@ -121,9 +128,24 @@ function lintUnknownTools(
   }
 }
 
+/** Warn when the team pins a runtimeVersion the installed runtime doesn't satisfy. */
+function lintRuntimeVersion(snapshot: RegistrySnapshot, ctx: LintContext, out: Diagnostic[]): void {
+  const range = snapshot.manifest?.runtimeVersion;
+  if (!range) return;
+  const installed = ctx.installedVersion ?? runtimeVersion();
+  if (!satisfiesRange(installed, range)) {
+    out.push({
+      where: "ravel.json",
+      severity: "warning",
+      message: `team pins runtimeVersion "${range}" but the installed @runravel/ravel is ${installed} — config may target a different format.`,
+    });
+  }
+}
+
 /** Run all advisory checks over a snapshot. Returns warning diagnostics only. */
 export async function lintRegistry(snapshot: RegistrySnapshot, ctx: LintContext = {}): Promise<Diagnostic[]> {
   const out: Diagnostic[] = [];
+  lintRuntimeVersion(snapshot, ctx, out);
   for (const node of snapshot.nodes.values()) {
     const where = node.id === "" ? "tools.json" : `${node.id}/tools.json`;
     lintMemoryWrites(node, where, out);

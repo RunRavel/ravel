@@ -1,6 +1,6 @@
 {
   "name": "@runravel/ravel",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Ravel — an agentic runtime: define an agentic team as a folder of agents, tools, and processes, and run it with orchestration, budgets, scheduling, and human-in-the-loop approval.",
   "license": "Apache-2.0",

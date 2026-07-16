@@ -59,6 +59,10 @@ team-file formats.
    there deliberately — it's the versioned contract.
 6. **Tests are the safety net.** `test/` uses `FakeEngine` (scripted turns, no API
    key) + fixture teams under `test/fixtures/`. New engine behavior needs a test.
+7. **Config format is versioned.** Any change to the declarative team surface
+   (`agent.md`/`tools.json`/`processes`/`ravel.json` fields or semantics) bumps the
+   runtime minor version and adds a row to `docs/config-format.md` + a CHANGELOG
+   entry. Keep additions backward-compatible (optional fields, warnings not errors).
 
 ## Key seams (where things plug in)
 

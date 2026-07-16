@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { compileRegistry } from "../src/control-plane/registry.js";
 import { lintRegistry } from "../src/control-plane/lint.js";
+import { satisfiesRange } from "../src/schemas/manifest.js";
 import { SecretStore } from "../src/secrets/store.js";
 import { makeTempOrg, cleanup, agentMd, writeFiles } from "./helpers/tempOrg.js";
 
@@ -120,5 +121,58 @@ describe("Diagnostic severity", () => {
     });
     expect(result.ok).toBe(false);
     expect(result.diagnostics.length).toBeGreaterThan(0);
+  });
+});
+
+describe("manifest (ravel.json) + runtimeVersion", () => {
+  it("compiles clean with no manifest", async () => {
+    const { result } = await compile({});
+    expect(result.ok).toBe(true);
+    expect(result.snapshot!.manifest).toBeUndefined();
+  });
+
+  it("attaches a valid manifest to the snapshot", async () => {
+    const { result } = await compile({
+      "ravel.json": JSON.stringify({ name: "t", runtimeVersion: "^0.2" }),
+    });
+    expect(result.ok).toBe(true);
+    expect(result.snapshot!.manifest?.runtimeVersion).toBe("^0.2");
+  });
+
+  it("errors (not warns) on a malformed manifest", async () => {
+    const { result } = await compile({ "ravel.json": "{ not valid json" });
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.some((d) => d.where === "ravel.json")).toBe(true);
+  });
+
+  it("warns when installed runtime doesn't satisfy the pinned range", async () => {
+    const { result } = await compile({ "ravel.json": JSON.stringify({ runtimeVersion: "^0.9" }) });
+    const warnings = await lintRegistry(result.snapshot!, { installedVersion: "0.2.0" });
+    expect(warnings.some((w) => w.where === "ravel.json" && w.message.includes("runtimeVersion"))).toBe(true);
+  });
+
+  it("is silent when the installed runtime satisfies the pinned range", async () => {
+    const { result } = await compile({ "ravel.json": JSON.stringify({ runtimeVersion: "^0.2" }) });
+    const warnings = await lintRegistry(result.snapshot!, { installedVersion: "0.2.5" });
+    expect(warnings.some((w) => w.where === "ravel.json")).toBe(false);
+  });
+});
+
+describe("satisfiesRange", () => {
+  it("caret on 0.x is minor-locked", () => {
+    expect(satisfiesRange("0.2.0", "^0.2")).toBe(true);
+    expect(satisfiesRange("0.2.9", "^0.2.1")).toBe(true);
+    expect(satisfiesRange("0.3.0", "^0.2")).toBe(false);
+    expect(satisfiesRange("0.2.0", "^0.2.5")).toBe(false); // patch below floor
+  });
+  it("caret on >=1.x allows minor/patch within the major", () => {
+    expect(satisfiesRange("1.4.0", "^1.2")).toBe(true);
+    expect(satisfiesRange("2.0.0", "^1.2")).toBe(false);
+  });
+  it("tilde and exact", () => {
+    expect(satisfiesRange("0.2.3", "~0.2.1")).toBe(true);
+    expect(satisfiesRange("0.3.0", "~0.2.1")).toBe(false);
+    expect(satisfiesRange("0.2.0", "0.2.0")).toBe(true);
+    expect(satisfiesRange("0.2.1", "0.2.0")).toBe(false);
   });
 });

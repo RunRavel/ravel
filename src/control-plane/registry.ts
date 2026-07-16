@@ -3,6 +3,7 @@ import path from "node:path";
 import { parseAgentSpec, type AgentSpec } from "../schemas/agent.js";
 import { parseToolsConfig, EMPTY_TOOLS_CONFIG, type ToolsConfig } from "../schemas/tools.js";
 import { parseProcessSpec, type ProcessSpec } from "../schemas/process.js";
+import { parseManifest, type Manifest } from "../schemas/manifest.js";
 
 /**
  * The compiled, immutable representation of one agent folder.
@@ -69,6 +70,8 @@ export interface RegistrySnapshot {
   nodes: ReadonlyMap<string, RegistryNode>;
   /** All processes across the org, with owners resolved. */
   processes: readonly RegistryProcess[];
+  /** The parsed `ravel.json` manifest, if the org root has one. */
+  manifest?: Manifest;
 }
 
 export interface CompileResult {
@@ -82,6 +85,7 @@ const TOOLS_FILE = "tools.json";
 const PROCESS_DIR = "processes";
 const PROCESS_SUFFIX = ".process.md";
 const PLUGIN_FILE = "plugin.ts";
+const MANIFEST_FILE = "ravel.json";
 
 function toNodeId(root: string, dir: string): string {
   const rel = path.relative(root, dir);
@@ -263,6 +267,17 @@ export async function compileRegistry(root: string, version: number): Promise<Co
     return { ok: false, snapshot: null, diagnostics };
   }
 
+  // Optional team manifest (ravel.json). Absent is fine; malformed is an error.
+  let manifest: Manifest | undefined;
+  try {
+    const raw = await fs.readFile(path.join(absRoot, MANIFEST_FILE), "utf8");
+    manifest = parseManifest(raw);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      diagnostics.push({ where: MANIFEST_FILE, message: describeError(err) });
+    }
+  }
+
   const ctx: ScanContext = { root: absRoot, nodes: new Map(), diagnostics, pendingProcesses: [] };
   const rootId = await scanNode(absRoot, null, ctx);
 
@@ -301,6 +316,7 @@ export async function compileRegistry(root: string, version: number): Promise<Co
     rootId,
     nodes: ctx.nodes,
     processes,
+    ...(manifest ? { manifest } : {}),
   };
   return { ok: true, snapshot, diagnostics };
 }

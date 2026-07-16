@@ -384,7 +384,7 @@ async function scaffoldTeam(dir: string, name: string): Promise<void> {
   };
   await write(
     "ravel.json",
-    JSON.stringify({ name, runtimeVersion: "^0.1", description: `The ${name} team.` }, null, 2) + "\n",
+    JSON.stringify({ name, runtimeVersion: "^0.2", description: `The ${name} team.` }, null, 2) + "\n",
   );
   await write(
     "agent.md",
