@@ -84,6 +84,7 @@ describe("assembleMcpServers — per-node credential injection", () => {
     const tools: ToolsConfig = {
       tools: [],
       mcpServers: { globex: { type: "http", url: "https://globex.example.com/mcp", headers: { Authorization: "Bearer ${SERVICE_KEY}" } } },
+      env: [],
       defaultPolicy: "ask",
     };
     return {
@@ -110,6 +111,7 @@ describe("assembleMcpServers — per-node credential injection", () => {
     const tools: ToolsConfig = {
       tools: [],
       mcpServers: { globex: { type: "http", url: "https://globex.example.com/mcp", headers: { Authorization: "Bearer ${TMP_SERVICE_KEY_TEST}" } } },
+      env: [],
       defaultPolicy: "ask",
     };
     const req = { ...globexReq({}), tools };

@@ -3,6 +3,7 @@ import path from "node:path";
 import type { RegistryNode } from "../control-plane/registry.js";
 import { resolveModel, type ModelTier, type Budget } from "../schemas/common.js";
 import { policyForTool, SAFE_AUTO_TOOLS, type ApprovalBroker } from "../trust/approval.js";
+import { BUILTIN_TOOLS } from "../schemas/catalog.js";
 import type { ToolsConfig } from "../schemas/tools.js";
 import type { MemoryStore } from "../memory/store.js";
 import type { PluginRegistry } from "../plugins/loader.js";
@@ -31,20 +32,6 @@ export interface AgentActivity {
   since?: string;
 }
 
-/** Built-in SDK tools we recognize, so authors can opt into them by name in tools.json. */
-const BUILTIN_TOOLS = [
-  "Bash",
-  "Read",
-  "Write",
-  "Edit",
-  "Glob",
-  "Grep",
-  "WebSearch",
-  "WebFetch",
-  "TodoWrite",
-  "NotebookEdit",
-  "Task",
-] as const;
 /** Cheap read-only set so an agent can always read its staged files / working dir. */
 const READONLY_TOOLS = SAFE_AUTO_TOOLS;
 /**

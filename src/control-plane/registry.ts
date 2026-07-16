@@ -45,6 +45,13 @@ export interface Diagnostic {
   /** Path (file or dir) the problem relates to, relative to the org root. */
   where: string;
   message: string;
+  /**
+   * Absence means "error" (the historical behavior — any diagnostic fails the
+   * compile). Only an explicit `"warning"` is advisory and non-fatal; it's
+   * surfaced by `validate`/`serve` but never blocks compilation. Warnings are
+   * produced by the lint pass (`lint.ts`), not by the structural compiler.
+   */
+  severity?: "error" | "warning";
 }
 
 /**
@@ -279,7 +286,12 @@ export async function compileRegistry(root: string, version: number): Promise<Co
     });
   }
 
-  if (diagnostics.length > 0) {
+  // Only errors (absent severity, or explicit "error") fail the compile;
+  // "warning" diagnostics are advisory and never block a snapshot. The
+  // structural compiler emits errors only — warnings come from the lint pass —
+  // but the check is severity-aware so a snapshot can carry warnings if merged.
+  const hasError = diagnostics.some((d) => d.severity !== "warning");
+  if (hasError) {
     return { ok: false, snapshot: null, diagnostics };
   }
 
@@ -290,5 +302,5 @@ export async function compileRegistry(root: string, version: number): Promise<Co
     nodes: ctx.nodes,
     processes,
   };
-  return { ok: true, snapshot, diagnostics: [] };
+  return { ok: true, snapshot, diagnostics };
 }

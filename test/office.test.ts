@@ -6,6 +6,7 @@ import type { ToolsConfig } from "../src/schemas/tools.js";
 const cfg: ToolsConfig = {
   tools: [{ name: "deliver_to_client", policy: "ask" }],
   mcpServers: {},
+  env: [],
   defaultPolicy: "auto",
 };
 
@@ -22,7 +23,8 @@ describe("policyForTool MCP name normalization", () => {
 
 describe("policyForTool safe read-only set", () => {
   // An agent with no grants and the strictest default (ask).
-  const strict: ToolsConfig = { tools: [], mcpServers: {}, defaultPolicy: "ask" };
+  const strict: ToolsConfig = { tools: [], mcpServers: {}, env: [],
+ defaultPolicy: "ask" };
 
   it("auto-allows injected read-only built-ins even under defaultPolicy ask", () => {
     expect(policyForTool(strict, "Read")).toBe("auto");
@@ -37,7 +39,8 @@ describe("policyForTool safe read-only set", () => {
   });
 
   it("lets an explicit grant override the safe default", () => {
-    const gated: ToolsConfig = { tools: [{ name: "Glob", policy: "deny" }], mcpServers: {}, defaultPolicy: "ask" };
+    const gated: ToolsConfig = { tools: [{ name: "Glob", policy: "deny" }], mcpServers: {}, env: [],
+ defaultPolicy: "ask" };
     expect(policyForTool(gated, "Glob")).toBe("deny");
   });
 });

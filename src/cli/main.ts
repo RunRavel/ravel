@@ -11,7 +11,8 @@ import { createServer } from "../service/server.js";
 import { EmittingAudit } from "../trust/emittingAudit.js";
 import { JsonlAudit } from "../trust/audit.js";
 import { compileRegistry } from "../control-plane/registry.js";
-import { parseDotEnv } from "../secrets/store.js";
+import { lintRegistry } from "../control-plane/lint.js";
+import { parseDotEnv, SecretStore } from "../secrets/store.js";
 import type { ApprovalRequest, Usage } from "../domain/types.js";
 import { totalTokens } from "../domain/types.js";
 
@@ -204,14 +205,21 @@ async function main(): Promise<number> {
 
   if (command === "validate") {
     const result = await compileRegistry(root, 1);
-    if (result.ok && result.snapshot) {
-      stdout.write(`✓ valid — ${result.snapshot.nodes.size} agent(s), ${result.snapshot.processes.length} process(es)\n`);
-      for (const id of result.snapshot.nodes.keys()) stdout.write(`  • ${id || "(root)"}\n`);
-      return 0;
+    if (!result.ok || !result.snapshot) {
+      stdout.write("✗ invalid:\n");
+      for (const d of result.diagnostics) stdout.write(`  ✗ ${d.where}: ${d.message}\n`);
+      return 1;
     }
-    stdout.write("✗ invalid:\n");
-    for (const d of result.diagnostics) stdout.write(`  • ${d.where}: ${d.message}\n`);
-    return 1;
+    // Compiled clean → run the advisory lint (env + generic-mem-write). Plugin
+    // tool names aren't loaded here, so unknown-tool checks are serve-only.
+    const warnings = await lintRegistry(result.snapshot, { secrets: new SecretStore(root) });
+    stdout.write(`✓ valid — ${result.snapshot.nodes.size} agent(s), ${result.snapshot.processes.length} process(es)\n`);
+    for (const id of result.snapshot.nodes.keys()) stdout.write(`  • ${id || "(root)"}\n`);
+    if (warnings.length) {
+      stdout.write(`\n${warnings.length} warning(s):\n`);
+      for (const d of warnings) stdout.write(`  ⚠ ${d.where}: ${d.message}\n`);
+    }
+    return 0;
   }
 
   if (command === "create") {

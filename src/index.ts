@@ -33,3 +33,10 @@ export type {
 
 // --- trust (executor action contract for gated plugin actions) --------------
 export type { ActionHandler, ActionContext, ActionResult } from "./trust/executor.js";
+
+// --- config validation (declarative catalog + advisory lint) ----------------
+export { TOOL_CATALOG, BUILTIN_TOOLS, isCatalogTool, isMemoryWriteTool } from "./schemas/catalog.js";
+export type { CatalogEntry, ToolKind, ToolAccess } from "./schemas/catalog.js";
+export { lintRegistry } from "./control-plane/lint.js";
+export type { LintContext } from "./control-plane/lint.js";
+export type { Diagnostic } from "./control-plane/registry.js";

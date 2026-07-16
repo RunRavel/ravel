@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import type { ChokidarOptions } from "chokidar";
 import { RegistryWatcher } from "../control-plane/watcher.js";
 import type { RegistrySnapshot, Diagnostic } from "../control-plane/registry.js";
+import { lintRegistry } from "../control-plane/lint.js";
 import { Lifecycle } from "../runtime/lifecycle.js";
 import type { AgentEngine } from "../runtime/engine.js";
 import { Orchestrator, type ProcessRunResult } from "../orchestrator/orchestrator.js";
@@ -163,6 +164,30 @@ export class App {
     // settled before start() returns, with no race on the two applies.
     this.enqueueApply(initial.snapshot);
     await this.applyChain;
+    // Plugins are now loaded → run the advisory lint with full context (real
+    // plugin tool names + per-node .env chains) and surface warnings without
+    // blocking startup. Config errors already threw above; these never do.
+    await this.lintAndReport();
+  }
+
+  /**
+   * Advisory config lint at startup — generic-mem-write, missing/undeclared env,
+   * and dead tool grants. Emits each as a non-fatal `config.warning` audit event
+   * (tee'd to the verbose sink under `-v`). Never throws.
+   */
+  private async lintAndReport(): Promise<void> {
+    if (!this.snapshot) return;
+    try {
+      const warnings = await lintRegistry(this.snapshot, {
+        secrets: this.secrets,
+        pluginToolNamesByNode: (nodeId) => (this.plugins.forNode(nodeId)?.tools ?? []).map((t) => t.name),
+      });
+      for (const w of warnings) {
+        await this.audit.append("config.warning", { data: { where: w.where, message: w.message } });
+      }
+    } catch {
+      /* lint is best-effort; never block or crash startup on it */
+    }
   }
 
   async stop(): Promise<void> {

@@ -55,6 +55,13 @@ export const ToolsConfig = z
   .object({
     tools: z.array(ToolGrant).default([]),
     mcpServers: z.record(McpServerSpec).default({}),
+    /**
+     * Host env var names this agent expects to be available (from its `.env`
+     * chain or `process.env`). Declaring them lets `validate`/`serve` warn when
+     * a key is missing or a `${KEY}` in an mcpServers header is used undeclared.
+     * Actual use stays explicit: declare the keys your tools/servers rely on.
+     */
+    env: z.array(z.string()).default([]),
     /** Default policy for any tool not explicitly listed in `tools`. */
     defaultPolicy: PermissionPolicy.default("ask"),
     /**
@@ -79,5 +86,6 @@ export function parseToolsConfig(source: string): ToolsConfig {
 export const EMPTY_TOOLS_CONFIG: ToolsConfig = {
   tools: [],
   mcpServers: {},
+  env: [],
   defaultPolicy: "ask",
 };

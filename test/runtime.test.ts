@@ -100,6 +100,7 @@ describe("AgentRuntime.runTask", () => {
     const tools: ToolsConfig = {
       tools: [{ name: "send_email", policy: "ask" }],
       mcpServers: {},
+      env: [],
       defaultPolicy: "ask",
     };
     let decision: string | undefined;
@@ -124,6 +125,7 @@ describe("AgentRuntime.runTask", () => {
     const tools: ToolsConfig = {
       tools: [{ name: "send_email", policy: "auto" }], // even auto is denied in dry-run
       mcpServers: {},
+      env: [],
       defaultPolicy: "ask",
     };
     let decision: string | undefined;
@@ -203,7 +205,8 @@ describe("AgentRuntime.runTask", () => {
     // `builtins: "none"` withholds Read/Glob/Grep (for memory-only agents), but
     // explicitly-granted built-ins (WebSearch) are still exposed.
     const noFiles = new AgentRuntime(
-      node({ tools: { tools: [{ name: "WebSearch", policy: "auto" }], mcpServers: {}, defaultPolicy: "ask", builtins: "none" } }),
+      node({ tools: { tools: [{ name: "WebSearch", policy: "auto" }], mcpServers: {}, env: [],
+ defaultPolicy: "ask", builtins: "none" } }),
       { engine, audit, approvals, killSwitch, workdirRoot },
     );
     await noFiles.runTask(contract());
@@ -212,7 +215,8 @@ describe("AgentRuntime.runTask", () => {
 
     // An agent that explicitly grants Bash gets it added to the read-only set.
     const withBash = new AgentRuntime(
-      node({ tools: { tools: [{ name: "Bash", policy: "auto" }], mcpServers: {}, defaultPolicy: "ask" } }),
+      node({ tools: { tools: [{ name: "Bash", policy: "auto" }], mcpServers: {}, env: [],
+ defaultPolicy: "ask" } }),
       { engine, audit, approvals, killSwitch, workdirRoot },
     );
     await withBash.runTask(contract());
@@ -225,6 +229,7 @@ describe("AgentRuntime.runTask", () => {
     const tools: ToolsConfig = {
       tools: [{ name: "search", policy: "auto" }],
       mcpServers: {},
+      env: [],
       defaultPolicy: "auto",
     };
     let goalDuringRun: string | undefined;
@@ -251,6 +256,7 @@ describe("AgentRuntime.runTask", () => {
     const tools: ToolsConfig = {
       tools: [{ name: "search", policy: "auto" }],
       mcpServers: {},
+      env: [],
       defaultPolicy: "auto",
     };
     const decisions: string[] = [];

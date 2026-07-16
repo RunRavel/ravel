@@ -101,6 +101,7 @@ describe("assembleMcpServers — plugin server", () => {
     const tools: ToolsConfig = {
       tools: [{ name: "echo", policy: "auto" }],
       mcpServers: {},
+      env: [],
       defaultPolicy: "ask",
     };
     const req: EngineRequest = {
