@@ -3,7 +3,8 @@ import path from "node:path";
 import { promises as fs } from "node:fs";
 import type { App } from "../platform/app.js";
 import type { EmittingAudit } from "../trust/emittingAudit.js";
-import { compileRegistry } from "../control-plane/registry.js";
+import { compileRegistry, type Diagnostic } from "../control-plane/registry.js";
+import { lintRegistry } from "../control-plane/lint.js";
 import { newId } from "../domain/ids.js";
 import { ENV_KEY_RE } from "../secrets/store.js";
 import type { ProcessRunResult } from "../orchestrator/orchestrator.js";
@@ -215,8 +216,7 @@ export function createServer(deps: ServerDeps): http.Server {
 
     // --- config authoring ----------------------------------------------------
     if (m === "GET" && url.pathname === "/api/validate") {
-      const result = await compileRegistry(orgRoot, ++compileVersion);
-      return sendJson(res, 200, { ok: result.ok, diagnostics: result.diagnostics });
+      return sendJson(res, 200, await compileAndLint());
     }
     if (m === "GET" && url.pathname === "/api/files") {
       const rel = url.searchParams.get("path") ?? "";
@@ -236,8 +236,7 @@ export function createServer(deps: ServerDeps): http.Server {
       await fs.mkdir(path.dirname(abs), { recursive: true });
       await fs.writeFile(abs, String(body["content"] ?? ""), "utf8");
       // Validate synchronously; the watcher hot-reloads the live org separately.
-      const result = await compileRegistry(orgRoot, ++compileVersion);
-      return sendJson(res, 200, { ok: result.ok, diagnostics: result.diagnostics });
+      return sendJson(res, 200, await compileAndLint());
     }
 
     // --- operator console (static, same origin as the API) -------------------
@@ -249,6 +248,23 @@ export function createServer(deps: ServerDeps): http.Server {
   }
 
   // --- helpers ---------------------------------------------------------------
+
+  /**
+   * Compile the org and, if it compiles clean, run the advisory lint (full
+   * context: loaded plugin tool names + per-node secrets) so `/api/validate`
+   * and a config save return the SAME severity-tagged diagnostics `-v`/`serve`
+   * would surface — the metadata a hosting platform or the console needs to
+   * show warnings without scraping stderr.
+   */
+  async function compileAndLint(): Promise<{ ok: boolean; diagnostics: Diagnostic[] }> {
+    const result = await compileRegistry(orgRoot, ++compileVersion);
+    if (!result.ok || !result.snapshot) return { ok: false, diagnostics: result.diagnostics };
+    const warnings = await lintRegistry(result.snapshot, {
+      secrets: app.secrets,
+      pluginToolNamesByNode: (nodeId) => (app.plugins.forNode(nodeId)?.tools ?? []).map((t) => t.name),
+    });
+    return { ok: true, diagnostics: [...result.diagnostics, ...warnings] };
+  }
 
   interface RunSummary {
     runId: string;

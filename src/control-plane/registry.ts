@@ -53,6 +53,14 @@ export interface Diagnostic {
    * produced by the lint pass (`lint.ts`), not by the structural compiler.
    */
   severity?: "error" | "warning";
+  /**
+   * Stable machine-readable identifier for the check that produced this
+   * diagnostic (e.g. "memory-write", "env-missing"). Lets CLI output group
+   * near-duplicate messages and lets API/JSON consumers key off a code instead
+   * of parsing prose. Only set by the lint pass; the structural compiler's
+   * errors don't have one (each is already a distinct, specific problem).
+   */
+  code?: string;
 }
 
 /**

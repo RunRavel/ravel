@@ -26,6 +26,26 @@ Declarative config validation + config-format versioning.
   `lintRegistry`, `parseManifest`/`satisfiesRange`/`Manifest`, `runtimeVersion`,
   and `Diagnostic` (now with an optional `severity`).
 
+- **`ravel validate --json`** — one JSON object (`ok`, `nodes`, `processCount`,
+  `diagnostics`) instead of human-readable text, for CI/scripting.
+- **`ravel serve --log-format json`** (or `RAVEL_LOG_FORMAT=json`) — the verbose
+  stream emits NDJSON (one object per line, with a `level`: info/warn/error)
+  instead of pretty text, for log aggregators (Datadog, CloudWatch, Loki).
+  Implies `--verbose`. `AppOptions.logFormat` for embedders.
+- `Diagnostic` gains an optional `code` (e.g. `"memory-write"`, `"env-missing"`)
+  — a stable identifier for the lint rule that produced it, exported as
+  `LINT_CODES`. Lets `validate`'s text output group repeated warnings instead of
+  printing the same explanation N times, and lets API/JSON consumers key off a
+  code instead of parsing prose.
+- **`GET /api/validate` and `PUT /api/files` now include lint warnings**
+  (severity + code), not just compile errors — the metadata a hosting platform
+  or the console needs to show config warnings without scraping logs.
+
+### Fixed
+
+- `config.warning` audit events rendered as a bare `· config.warning` in `-v`
+  output (no detail) — `formatEvent` was missing a case for the new event type.
+
 ### Changed
 
 - `Diagnostic` gains an optional `severity` (`"error" | "warning"`; absent =

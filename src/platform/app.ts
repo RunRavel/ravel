@@ -10,7 +10,7 @@ import { Orchestrator, type ProcessRunResult } from "../orchestrator/orchestrato
 import { EnginePlanner } from "../orchestrator/planner.js";
 import { MessageBus } from "../messaging/bus.js";
 import { MemoryStore } from "../memory/store.js";
-import { JsonlAudit, LoggingAudit, type AuditSink } from "../trust/audit.js";
+import { JsonlAudit, LoggingAudit, type AuditSink, type LogFormat } from "../trust/audit.js";
 import { ApprovalBroker, type ApprovalMode } from "../trust/approval.js";
 import { ProposalStore } from "../trust/proposals.js";
 import { ActionExecutor } from "../trust/executor.js";
@@ -32,6 +32,8 @@ export interface AppOptions {
   dryRun?: boolean;
   /** Tee every audit event to this sink (e.g. stderr) for live verbose logging. */
   verbose?: (line: string) => void;
+  /** How `verbose` renders each event: "pretty" (default) or "json" (NDJSON, one object per line, with a `level`). */
+  logFormat?: LogFormat;
   /** Where runtime state (working dirs, inboxes, memory, audit) lives. */
   runtimeDir?: string;
   /** Persist inboxes to disk under the runtime dir. */
@@ -78,7 +80,7 @@ export class App {
     this.runtimeDir = runtimeDir;
     this.root = opts.root;
     const baseAudit = opts.audit ?? new JsonlAudit(path.join(runtimeDir, "audit.jsonl"));
-    this.audit = opts.verbose ? new LoggingAudit(baseAudit, opts.verbose) : baseAudit;
+    this.audit = opts.verbose ? new LoggingAudit(baseAudit, opts.verbose, opts.logFormat) : baseAudit;
     this.proposals = new ProposalStore({ filePath: path.join(runtimeDir, "proposals.json") });
     this.approvals = new ApprovalBroker(this.audit, {
       mode: opts.approvals ?? "deferred",

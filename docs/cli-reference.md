@@ -29,9 +29,12 @@ Compiles the folder tree (agent.md / tools.json / processes / ravel.json)
 against the zod schemas and reports diagnostics — no agents run. Prints `✗`
 **errors** (malformed config, unresolved process owner) and `⚠` **warnings**
 (advisory lint — generic memory-write grants, missing/undeclared env, pinned
-`runtimeVersion` mismatch). Exit `1` if any error, `0` if only warnings (or
-clean). Safe to run in CI. See [config-format.md](./config-format.md) for the
-full warning list.
+`runtimeVersion` mismatch), grouped by rule so a repeated warning across many
+agents prints its explanation once. Exit `1` if any error, `0` if only warnings
+(or clean). `--json` emits one JSON object (`ok`, `nodes`, `processCount`,
+`diagnostics` — each with `where`/`message`/`severity`/`code`) instead, for
+CI/scripting. Safe to run in CI. See [config-format.md](./config-format.md) for
+the full warning list.
 
 ## `ravel run <process-name> [options]`
 
@@ -111,6 +114,7 @@ runtimes send on stop).
 |---|---|---|
 | `--dir <path>` | all commands | Org root folder (default: cwd) |
 | `-v`, `--verbose` | `run`, `serve` | Stream the audit trail (turns, dispatches, tool calls, proposals) to stderr |
+| `--log-format <fmt>` | `run`, `serve` | `pretty` (default) or `json` — NDJSON, one object per line with a `level` (info/warn/error), for log aggregators (Datadog, CloudWatch, Loki). Implies `--verbose`. Also settable via `RAVEL_LOG_FORMAT`. |
 
 ## Exit codes
 

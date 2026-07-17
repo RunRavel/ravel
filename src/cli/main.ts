@@ -9,8 +9,8 @@ import { App } from "../platform/app.js";
 import { SdkEngine } from "../runtime/sdkEngine.js";
 import { createServer } from "../service/server.js";
 import { EmittingAudit } from "../trust/emittingAudit.js";
-import { JsonlAudit } from "../trust/audit.js";
-import { compileRegistry } from "../control-plane/registry.js";
+import { JsonlAudit, type LogFormat } from "../trust/audit.js";
+import { compileRegistry, type Diagnostic } from "../control-plane/registry.js";
 import { lintRegistry } from "../control-plane/lint.js";
 import { parseDotEnv, SecretStore } from "../secrets/store.js";
 import type { ApprovalRequest, Usage } from "../domain/types.js";
@@ -42,6 +42,11 @@ Options:
   --input k=v         Run input passed to the process (repeatable)
   --file <path>       Source file staged into each dispatched worker's workdir (repeatable)
   -v, --verbose       Stream the audit trail (turns, dispatches, tools, proposals) to stderr
+  --log-format <fmt>  pretty (default) or json (NDJSON, one object per line, with a
+                      "level" field — for log aggregators). Implies --verbose.
+                      Also settable via RAVEL_LOG_FORMAT.
+  --json              validate: emit one JSON object (ok, nodes, diagnostics with
+                      code/severity) instead of human-readable text
 
 Example:
   ravel create my-team && ravel serve --dir my-team
@@ -71,6 +76,37 @@ async function loadEnvFiles(orgDir: string): Promise<void> {
       if (process.env[key] === undefined) process.env[key] = value;
     }
   }
+}
+
+/**
+ * Resolve the verbose stream's on/off state and format. `--log-format` (or
+ * `RAVEL_LOG_FORMAT`) implies the stream is on even without `-v` — specifying a
+ * format for a disabled stream would otherwise silently do nothing.
+ */
+function resolveLogging(values: { verbose?: boolean; "log-format"?: string }): { verbose: boolean; logFormat: LogFormat } {
+  const raw = values["log-format"] ?? process.env["RAVEL_LOG_FORMAT"];
+  const logFormat: LogFormat = raw === "json" ? "json" : "pretty";
+  return { verbose: Boolean(values.verbose) || raw !== undefined, logFormat };
+}
+
+/**
+ * Group diagnostics by `code` for compact CLI output — every lint message
+ * follows `<specific clause> — <shared rule explanation>`, so splitting on the
+ * first " — " lets a repeated rule (e.g. 14 "memory-write" warnings across a
+ * team) print its explanation once instead of 14 times.
+ */
+function groupDiagnostics(diagnostics: Diagnostic[]): Array<[string, Array<{ where: string; headline: string; detail: string }>]> {
+  const groups = new Map<string, Array<{ where: string; headline: string; detail: string }>>();
+  for (const d of diagnostics) {
+    const code = d.code ?? d.message;
+    const idx = d.message.indexOf(" — ");
+    const headline = idx === -1 ? d.message : d.message.slice(0, idx);
+    const detail = idx === -1 ? "" : d.message.slice(idx + 3);
+    const group = groups.get(code) ?? [];
+    group.push({ where: d.where, headline, detail });
+    groups.set(code, group);
+  }
+  return [...groups.entries()];
 }
 
 function fmtUsage(u: Usage): string {
@@ -110,7 +146,7 @@ async function runServe(
   root: string,
   port: number,
   verbose: boolean,
-  opts: { stateDir?: string; readOnlyConfig?: boolean; host?: string } = {},
+  opts: { stateDir?: string; readOnlyConfig?: boolean; host?: string; logFormat?: LogFormat } = {},
 ): Promise<number> {
   // A single run's abort (budget/turn cap, kill switch, or the Agent SDK's own
   // detached internals) must never take the whole long-running service down. The
@@ -138,7 +174,9 @@ async function runServe(
     engine: new SdkEngine(),
     audit: events,
     runtimeDir,
-    ...(verbose ? { verbose: (line: string) => process.stderr.write(`${line}\n`) } : {}),
+    ...(verbose
+      ? { verbose: (line: string) => process.stderr.write(`${line}\n`), logFormat: opts.logFormat ?? "pretty" }
+      : {}),
   });
   await app.start();
 
@@ -186,11 +224,13 @@ async function main(): Promise<number> {
       input: { type: "string", multiple: true },
       file: { type: "string", multiple: true },
       verbose: { type: "boolean", short: "v" },
+      "log-format": { type: "string" },
       sync: { type: "boolean" },
       port: { type: "string" },
       host: { type: "string" },
       "state-dir": { type: "string" },
       "read-only-config": { type: "boolean" },
+      json: { type: "boolean" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -206,6 +246,10 @@ async function main(): Promise<number> {
   if (command === "validate") {
     const result = await compileRegistry(root, 1);
     if (!result.ok || !result.snapshot) {
+      if (values.json) {
+        stdout.write(`${JSON.stringify({ ok: false, diagnostics: result.diagnostics })}\n`);
+        return 1;
+      }
       stdout.write("✗ invalid:\n");
       for (const d of result.diagnostics) stdout.write(`  ✗ ${d.where}: ${d.message}\n`);
       return 1;
@@ -213,11 +257,25 @@ async function main(): Promise<number> {
     // Compiled clean → run the advisory lint (env + generic-mem-write). Plugin
     // tool names aren't loaded here, so unknown-tool checks are serve-only.
     const warnings = await lintRegistry(result.snapshot, { secrets: new SecretStore(root) });
+    if (values.json) {
+      stdout.write(
+        `${JSON.stringify({
+          ok: true,
+          nodes: [...result.snapshot.nodes.keys()],
+          processCount: result.snapshot.processes.length,
+          diagnostics: warnings,
+        })}\n`,
+      );
+      return 0;
+    }
     stdout.write(`✓ valid — ${result.snapshot.nodes.size} agent(s), ${result.snapshot.processes.length} process(es)\n`);
     for (const id of result.snapshot.nodes.keys()) stdout.write(`  • ${id || "(root)"}\n`);
     if (warnings.length) {
       stdout.write(`\n${warnings.length} warning(s):\n`);
-      for (const d of warnings) stdout.write(`  ⚠ ${d.where}: ${d.message}\n`);
+      for (const [code, group] of groupDiagnostics(warnings)) {
+        stdout.write(`\n⚠ ${code} (${group.length}) — ${group[0]!.detail}\n`);
+        for (const g of group) stdout.write(`    ${g.where}: ${g.headline}\n`);
+      }
     }
     return 0;
   }
@@ -247,11 +305,14 @@ async function main(): Promise<number> {
     );
   }
 
+  const logging = resolveLogging(values);
+
   if (command === "serve") {
-    return runServe(root, values.port ? Number(values.port) : 4317, Boolean(values.verbose), {
+    return runServe(root, values.port ? Number(values.port) : 4317, logging.verbose, {
       ...(values.host ? { host: values.host } : {}),
       ...(values["state-dir"] ? { stateDir: values["state-dir"] } : {}),
       ...(values["read-only-config"] ? { readOnlyConfig: true } : {}),
+      logFormat: logging.logFormat,
     });
   }
 
@@ -261,7 +322,9 @@ async function main(): Promise<number> {
     ...(values["state-dir"] ? { runtimeDir: path.resolve(values["state-dir"]) } : {}),
     ...(values["dry-run"] ? { dryRun: true } : {}),
     ...(values.sync ? { approvals: "sync" as const } : {}),
-    ...(values.verbose ? { verbose: (line: string) => process.stderr.write(`${line}\n`) } : {}),
+    ...(logging.verbose
+      ? { verbose: (line: string) => process.stderr.write(`${line}\n`), logFormat: logging.logFormat }
+      : {}),
   });
   await app.start();
 

@@ -25,6 +25,25 @@ export interface AuditSink {
   load?(): Promise<void>;
 }
 
+/** How the verbose stream (`-v`) renders each event: human-readable, or NDJSON for log aggregators. */
+export type LogFormat = "pretty" | "json";
+
+/**
+ * Coarse severity for an audit event, used by JSON-format logging so an
+ * aggregator (Datadog, CloudWatch, Loki) can filter/alert without parsing
+ * prose. Best-effort classification, not exhaustive.
+ */
+export function levelFor(e: AuditEvent): "info" | "warn" | "error" {
+  if (e.type.endsWith("_failed") || e.type === "task.unrouted") return "error";
+  if (e.type === "config.warning" || e.type === "registry.invalid" || e.type === "plugin.action_conflict") return "warn";
+  const status = e.data["status"];
+  if ((e.type === "task.finished" || e.type === "process.finished") && status === "failed") return "error";
+  if ((e.type === "task.finished" || e.type === "process.finished") && (status === "aborted" || status === "budget_exhausted")) {
+    return "warn";
+  }
+  return "info";
+}
+
 /** In-memory audit sink — used in tests and as the dashboard's live buffer. */
 export class InMemoryAudit implements AuditSink {
   private readonly events: AuditEvent[] = [];
@@ -72,6 +91,8 @@ export class LoggingAudit implements AuditSink {
   constructor(
     private readonly base: AuditSink,
     private readonly emit: (line: string) => void,
+    /** Default "pretty" (human-readable). "json" emits one NDJSON object per event. */
+    private readonly format: LogFormat = "pretty",
   ) {}
 
   async append(
@@ -79,7 +100,7 @@ export class LoggingAudit implements AuditSink {
     fields: Omit<Partial<AuditEvent>, "seq" | "at" | "type"> = {},
   ): Promise<AuditEvent> {
     const event = await this.base.append(type, fields);
-    this.emit(formatEvent(event));
+    this.emit(this.format === "json" ? JSON.stringify({ ...event, level: levelFor(event) }) : formatEvent(event));
     return event;
   }
 
@@ -135,6 +156,9 @@ export function formatEvent(e: AuditEvent): string {
       break;
     case "registry.invalid":
       detail = `${(d["diagnostics"] as string[] | undefined)?.length ?? 0} diagnostic(s)`;
+      break;
+    case "config.warning":
+      detail = `${d["where"]}: ${d["message"]}`;
       break;
     default:
       detail = "";

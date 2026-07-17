@@ -56,17 +56,22 @@ installed runtime doesn't satisfy the range, `validate`/`serve` emits a warning
 
 ### What the linter warns about (all non-fatal)
 
-- **Generic memory writes**: granting `mem_text_set` / `mem_json_set` / `mem_json_merge`
-  / `mem_queue_append` / `mem_queue_clear` warns — prefer a typed `plugin.ts` tool for
-  durable domain data (free-form key writes lead to memory sprawl).
-- **Env**: a declared `env` key not resolvable from the `.env` chain or `process.env`;
-  or a `${KEY}` used in an mcpServers header but not declared in `env`.
-- **Unknown tool grant** (serve only): a grant naming no known built-in/office/memory
-  tool and no loaded plugin tool — a dead grant. Suppressed when the node declares an
-  mcpServer (the name may be a remote tool).
+Each warning carries a stable `code` (exported as `LINT_CODES`) so tooling can key
+off it instead of parsing message text — `ravel validate`'s text output groups
+repeated warnings by code, and `GET /api/validate` / `PUT /api/files` return it
+in each diagnostic (`{ where, message, severity, code }`).
+
+| Code | Fires when |
+|---|---|
+| `memory-write` | Granting a generic memory-mutating tool (`mem_text_set`, `mem_json_set`, `mem_json_merge`, `mem_queue_append`, `mem_queue_clear`) — prefer a typed `plugin.ts` tool for durable domain data (free-form key writes lead to memory sprawl). |
+| `env-missing` | A declared (or referenced) `env` key isn't resolvable from the `.env` chain or `process.env`. |
+| `env-undeclared` | A `${KEY}` used in an mcpServers header isn't declared in `tools.json`'s `env`. |
+| `unknown-tool` | (serve only) A grant names no known built-in/office/memory/plugin tool — a dead grant. Suppressed when the node declares an mcpServer (the name may be a remote tool). |
+| `runtime-version-mismatch` | The installed runtime doesn't satisfy the team's pinned `runtimeVersion`. |
 
 Errors (malformed frontmatter/JSON, unresolved process owner, missing root `agent.md`)
-still fail `validate` (exit 1). Warnings print but exit 0.
+still fail `validate` (exit 1). Warnings print but exit 0. Use `ravel validate --json`
+for machine-readable output.
 
 ## Version history
 

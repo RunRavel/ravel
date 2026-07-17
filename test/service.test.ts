@@ -25,14 +25,26 @@ afterEach(async () => {
   dirs = [];
 });
 
+/**
+ * A disposable copy of the ACME fixture. Some tests write config through the
+ * HTTP API (`PUT /api/files`), which writes real files under `root` — that
+ * must never be the checked-in `examples/acme` on disk.
+ */
+async function copyAcme(): Promise<string> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ravel-acme-copy-"));
+  dirs.push(dir);
+  await fs.cp(ACME, dir, { recursive: true });
+  return dir;
+}
+
 async function boot(
   engine: FakeEngine,
-  opts: { uiDir?: string; readOnlyConfig?: boolean } = {},
+  opts: { uiDir?: string; readOnlyConfig?: boolean; root?: string } = {},
 ): Promise<string> {
   const runtimeDir = await fs.mkdtemp(path.join(os.tmpdir(), "ravel-svc-"));
   dirs.push(runtimeDir);
   const events = new EmittingAudit(new InMemoryAudit());
-  const app = new App({ root: ACME, engine, audit: events, runtimeDir, watchOptions: { usePolling: true, interval: 50 } });
+  const app = new App({ root: opts.root ?? ACME, engine, audit: events, runtimeDir, watchOptions: { usePolling: true, interval: 50 } });
   apps.push(app);
   await app.start();
   const server = createServer({
@@ -343,5 +355,32 @@ describe("HTTP service", () => {
     // validate returns diagnostics shape
     const v = (await (await fetch(`${base}/api/validate`)).json()) as { ok: boolean };
     expect(v.ok).toBe(true);
+  });
+
+  it("/api/validate and PUT /api/files surface lint warnings (severity + code), not just compile errors", async () => {
+    // Isolated copy — this test PUTs config through the API, which writes real
+    // files under root; must never touch the checked-in examples/acme fixture.
+    const base = await boot(new FakeEngine(() => "ok"), { root: await copyAcme() });
+
+    // The acme fixture has no generic memory-write grants — clean.
+    const clean = (await (await fetch(`${base}/api/validate`)).json()) as { ok: boolean; diagnostics: Array<{ code?: string }> };
+    expect(clean.ok).toBe(true);
+    expect(clean.diagnostics.some((d) => d.code === "memory-write")).toBe(false);
+
+    // Grant a generic memory write — both /api/validate and the PUT response should warn.
+    const toolsJson = JSON.stringify({ tools: [{ name: "mem_text_set", policy: "auto" }] });
+    const put = await fetch(`${base}/api/files`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: "growth/copywriter/tools.json", content: toolsJson }),
+    });
+    const putBody = (await put.json()) as { ok: boolean; diagnostics: Array<{ code?: string; severity?: string; where: string }> };
+    expect(putBody.ok).toBe(true); // warnings never fail compile
+    const warning = putBody.diagnostics.find((d) => d.code === "memory-write");
+    expect(warning?.severity).toBe("warning");
+    expect(warning?.where).toBe("growth/copywriter/tools.json");
+
+    const after = (await (await fetch(`${base}/api/validate`)).json()) as { diagnostics: Array<{ code?: string }> };
+    expect(after.diagnostics.some((d) => d.code === "memory-write")).toBe(true);
   });
 });

@@ -31,6 +31,10 @@ app.dashboard();                                 // DashboardSnapshot: spend, pe
 await app.stop();
 ```
 
+`AppOptions.logFormat`: `"pretty"` (default) or `"json"` — how the `verbose`
+sink renders each event (NDJSON with a `level`, for log aggregators). Only
+takes effect when `verbose` is set.
+
 `AppOptions`: `root` (org folder), `engine` (an `AgentEngine`), plus optional
 `audit`, `dryRun`, `verbose`, `runtimeDir` (default `<root>/.ravel`),
 `persistMessages`, `approvals` (`"deferred"` default, or `"sync"` for
@@ -86,6 +90,43 @@ grant list; `GENERIC_MEMORY_TOOL_NAMES` is the full list of tool names it can
 expose (`mem_text_get/set`, `mem_json_get/set/merge`,
 `mem_queue_append/list/clear`, `mem_keys`) — grant these by name in
 `tools.json`.
+
+## Config validation
+
+The building blocks behind `ravel validate` / the `-v` startup lint — useful for
+a hosting platform that wants to check a team's config before deploying it, or
+a console that wants to show warnings inline.
+
+### `lintRegistry`
+
+`lintRegistry(snapshot, ctx?): Promise<Diagnostic[]>` — runs the advisory lint
+(generic memory-write grants, missing/undeclared env, unknown tool grants,
+`runtimeVersion` mismatch) over a compiled `RegistrySnapshot` and returns
+warning diagnostics. `LintContext` is optional and partial: pass `secrets` (a
+`SecretStore`) for the env checks, `pluginToolNamesByNode` (only knowable once
+plugins are loaded) to enable the unknown-tool check, and `installedVersion`
+to override the runtime version read for tests.
+
+### `Diagnostic`, `LINT_CODES`
+
+`Diagnostic` — `{ where, message, severity?, code? }`. Absent `severity` means
+error (fails compile); `"warning"` is advisory. `code` is a stable identifier
+for the rule that produced a warning (`LINT_CODES.memoryWrite` = `"memory-write"`,
+etc. — see [config-format.md](./config-format.md) for the full list).
+
+### `TOOL_CATALOG`, `BUILTIN_TOOLS`, `isCatalogTool`, `isMemoryWriteTool`
+
+The declarative catalog of tools the runtime itself provides (built-in SDK
+tools, office actions, generic memory tools) — the source of truth `lintRegistry`
+checks grants against. Plugin and remote-MCP tool names are never in the
+catalog (unknowable statically); see `lintRegistry` above for how those are handled.
+
+### `parseManifest`, `satisfiesRange`, `Manifest`, `runtimeVersion`
+
+`parseManifest(source)` parses a `ravel.json` string (throws on invalid JSON/shape).
+`satisfiesRange(version, range)` is the minimal semver-range check behind the
+`runtimeVersion` warning (caret/tilde/exact only — not a full semver
+implementation). `runtimeVersion()` returns the installed `@runravel/ravel` version.
 
 ## Plugins
 

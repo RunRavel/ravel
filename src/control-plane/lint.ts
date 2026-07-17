@@ -30,6 +30,15 @@ export interface LintContext {
   installedVersion?: string;
 }
 
+/** Stable codes for every warning this pass produces — see docs/config-format.md. */
+export const LINT_CODES = {
+  memoryWrite: "memory-write",
+  envMissing: "env-missing",
+  envUndeclared: "env-undeclared",
+  unknownTool: "unknown-tool",
+  runtimeVersionMismatch: "runtime-version-mismatch",
+} as const;
+
 /** Matches `${KEY}` references (same shape the SDK substitutes in headers). */
 const ENV_REF_RE = /\$\{([A-Z_][A-Z0-9_]*)\}/g;
 
@@ -58,6 +67,7 @@ function lintMemoryWrites(node: RegistryNode, where: string, out: Diagnostic[]):
       out.push({
         where,
         severity: "warning",
+        code: LINT_CODES.memoryWrite,
         message: `grants generic memory write "${grant.name}" — prefer a typed plugin tool for durable domain data (agents inventing keys leads to memory sprawl; see docs/authoring-teams.md).`,
       });
     }
@@ -79,6 +89,7 @@ async function lintEnv(node: RegistryNode, where: string, ctx: LintContext, out:
       out.push({
         where,
         severity: "warning",
+        code: LINT_CODES.envUndeclared,
         message: `env "${key}" is used in an mcpServers header but not declared in tools.json "env" — declare it so missing keys are caught.`,
       });
     }
@@ -94,6 +105,7 @@ async function lintEnv(node: RegistryNode, where: string, ctx: LintContext, out:
         out.push({
           where,
           severity: "warning",
+          code: LINT_CODES.envMissing,
           message: `expected env "${key}" not found in the .env chain or process.env — tools relying on it will get an empty value.`,
         });
       }
@@ -123,6 +135,7 @@ function lintUnknownTools(
     out.push({
       where,
       severity: "warning",
+      code: LINT_CODES.unknownTool,
       message: `grant "${grant.name}" names no known tool (not a built-in, office, memory, or this team's plugin tool) — it is a dead grant.`,
     });
   }
@@ -137,6 +150,7 @@ function lintRuntimeVersion(snapshot: RegistrySnapshot, ctx: LintContext, out: D
     out.push({
       where: "ravel.json",
       severity: "warning",
+      code: LINT_CODES.runtimeVersionMismatch,
       message: `team pins runtimeVersion "${range}" but the installed @runravel/ravel is ${installed} — config may target a different format.`,
     });
   }
