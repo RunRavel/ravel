@@ -313,7 +313,7 @@ async function main(): Promise<number> {
       return 1;
     }
     await scaffoldTeam(dir, path.basename(dir));
-    stdout.write(`✓ created team "${name}"\n\n  cd ${name} && ravel serve --dir .\n`);
+    stdout.write(`✓ created team "${name}"\n\n  cd ${name}\n  npm install\n  npm run dev\n`);
     return 0;
   }
 
@@ -463,9 +463,34 @@ async function scaffoldTeam(dir: string, name: string): Promise<void> {
     await fs.mkdir(path.dirname(abs), { recursive: true });
     await fs.writeFile(abs, content, "utf8");
   };
+  // A team is an npm package: it pins the runtime it was authored against, so
+  // `npm install` in the team folder (and, later, a hosting platform's `npm ci`)
+  // gets exactly that version — the same portability every JS project expects.
+  await write(
+    "package.json",
+    JSON.stringify(
+      {
+        name,
+        version: "0.1.0",
+        private: true,
+        type: "module",
+        dependencies: { "@runravel/ravel": "^0.3" },
+        scripts: {
+          dev: "ravel serve --dir .",
+          validate: "ravel validate --dir .",
+          // Generic-PaaS entrypoint. A hardened/multi-tenant host invokes the
+          // ravel binary directly with --read-only-config/--state-dir/--log-format
+          // rather than running this script (see docs).
+          start: "ravel serve --dir . --host 0.0.0.0 --port ${PORT:-4317}",
+        },
+      },
+      null,
+      2,
+    ) + "\n",
+  );
   await write(
     "ravel.json",
-    JSON.stringify({ name, runtimeVersion: "^0.2", description: `The ${name} team.` }, null, 2) + "\n",
+    JSON.stringify({ name, runtimeVersion: "^0.3", description: `The ${name} team.` }, null, 2) + "\n",
   );
   await write(
     "agent.md",
@@ -477,8 +502,8 @@ async function scaffoldTeam(dir: string, name: string): Promise<void> {
   await write(
     "assistant/agent.md",
     `---\nname: Assistant\nrole: assistant\nmodel: sonnet\nautonomy: orchestrated\n---\n` +
-      `You carry out the task you're given and report back in one line. Use \`mem_text_set\`\n` +
-      `to record anything the team should remember.\n`,
+      `You carry out the task you're given and report back in one line. Keep it simple:\n` +
+      `do exactly what's asked and summarize the result.\n`,
   );
   await write(
     "assistant/tools.json",
@@ -486,10 +511,7 @@ async function scaffoldTeam(dir: string, name: string): Promise<void> {
       {
         defaultPolicy: "ask",
         builtins: "none",
-        tools: [
-          { name: "mem_text_get", policy: "auto", description: "Read a team memory value." },
-          { name: "mem_text_set", policy: "auto", description: "Write a team memory value." },
-        ],
+        tools: [],
         mcpServers: {},
       },
       null,
@@ -499,9 +521,9 @@ async function scaffoldTeam(dir: string, name: string): Promise<void> {
   await write(
     "processes/hello.process.md",
     `---\nname: Hello\nowner: lead\nparticipants: [assistant]\ntrigger:\n  type: manual\ndefinitionOfDone: >\n` +
-      `  The assistant recorded a greeting to team memory and reported done.\nbudget:\n  usd: 1\n  turns: 4\n---\n` +
-      `Dispatch the **assistant** to write a friendly greeting (from the run input \`who\`,\n` +
-      `defaulting to "world") to team memory via \`mem_text_set\`, then mark the process done.\n`,
+      `  The assistant composed a friendly greeting for \`who\` and reported it.\nbudget:\n  usd: 1\n  turns: 4\n---\n` +
+      `Dispatch the **assistant** to compose a friendly greeting (from the run input \`who\`,\n` +
+      `defaulting to "world") and report it back, then mark the process done.\n`,
   );
   await write(
     ".gitignore",

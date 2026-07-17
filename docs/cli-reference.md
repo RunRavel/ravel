@@ -18,10 +18,13 @@ ravel serve [--dir <org>] [--port 4317] [--host 127.0.0.1] [--state-dir <path>] 
 ## `ravel create <name>`
 
 Scaffolds a minimal, valid starter team at `./<name>` (fails if the folder
-already exists): a lead `agent.md`, one `assistant/` report with a
-`tools.json`, one `processes/hello.process.md`, and a `.gitignore` covering
-`.env` and `.ravel/`. See [getting-started.md](./getting-started.md) for what
-each file contains and why.
+already exists): a `package.json` (depends on `@runravel/ravel`, with
+`dev`/`validate`/`start` scripts), `ravel.json`, a lead `agent.md`, one
+`assistant/` report with a `tools.json`, one `processes/hello.process.md`, and
+a `.gitignore` covering `.env`, `.ravel/`, and `node_modules/`. A team is an
+npm package, so the usual next step is `cd <name> && npm install && npm run dev`.
+Run it without a global install via `npx @runravel/ravel create <name>`. See
+[getting-started.md](./getting-started.md) for what each file contains and why.
 
 ## `ravel validate [--dir <org>]`
 

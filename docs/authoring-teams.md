@@ -8,6 +8,7 @@ scheduling. Working examples: `examples/acme` (multi-agent org), `examples/harbo
 
 ```
 my-team/
+  package.json               # npm package: depends on @runravel/ravel; dev/validate/start scripts
   ravel.json                 # manifest: { name, runtimeVersion, description }
   agent.md                   # the team lead (root agent)
   tools.json                 # lead's tool grants (optional)
@@ -18,11 +19,25 @@ my-team/
     .env                     # per-agent secrets (gitignored)
   processes/
     daily-brief.process.md   # playbooks owned by an agent in this tree
-  .gitignore                 # must ignore .env and .ravel/
+  .gitignore                 # must ignore .env, .ravel/, node_modules/
 ```
 
 Folder tree = org chart. Every folder with an `agent.md` is an agent; its subfolders
-are its direct reports. Scaffold a valid starter with `ravel create <name>`.
+are its direct reports. Scaffold a valid starter with `npx @runravel/ravel create <name>`,
+then `npm install && npm run dev`.
+
+**A team is an npm package.** `package.json` depends on `@runravel/ravel` (pinned),
+so `npm install` locally and `npm ci` on a hosting platform install the exact runtime
+the team was authored against — the runtime is *not* something you install globally
+and hope matches. This also means a `plugin.ts` can `import { definePlugin } from
+"@runravel/ravel"` for real types and depend on third-party packages (they resolve
+from the team's own `node_modules`). The `runtimeVersion` field in `ravel.json` is a
+secondary, warn-only check; the lockfile is the real version contract.
+
+> The `examples/` in this repo run *in-tree* (no `package.json`, no `node_modules`)
+> because they resolve the runtime from the repo itself — so their `plugin.ts`
+> deliberately avoids third-party value imports. A standalone team you scaffold gets
+> a `package.json` and is not subject to that constraint.
 
 ## `agent.md` — an agent
 

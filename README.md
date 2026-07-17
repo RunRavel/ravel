@@ -15,14 +15,25 @@ my-team/
 
 ## Quick start
 
+A team is an **npm package** that depends on the runtime — clone/scaffold,
+`npm install`, `npm run dev`, the same loop as any JS project:
+
 ```bash
-npm i -g @runravel/ravel        # or add as a dependency
-ravel create my-team         # scaffold a team folder
-ravel serve --dir my-team    # run it locally (operator console + API)
+npx @runravel/ravel create my-team   # scaffold a team (no global install needed)
+cd my-team
+npm install                          # installs @runravel/ravel, pinned in package.json
+npm run dev                          # → ravel serve --dir .  (operator console + API)
 ```
 
-Runs on your own Anthropic key (`ANTHROPIC_API_KEY` in the environment or a `.env`).
-No build step — Ravel ships TypeScript and runs it via `tsx`.
+The scaffold's `package.json` pins the runtime (`"@runravel/ravel": "^0.3"`), so
+your team runs against the exact version it was authored on — locally and, later,
+on a hosting platform (`npm ci`). Runs on your own Anthropic key
+(`ANTHROPIC_API_KEY` in the environment or a `.env`). No build step — Ravel ships
+TypeScript and runs it via `tsx`.
+
+> Prefer a global CLI? `npm i -g @runravel/ravel` then `ravel serve --dir my-team`
+> works too — but the local-dependency model above is the recommended, portable
+> default (a plugin.ts with real dependencies needs the team's own `node_modules`).
 
 **Security posture:** `ravel serve` is a single-operator local tool — the API has
 no authentication by design. It binds `127.0.0.1` and grants CORS only to loopback

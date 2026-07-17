@@ -107,6 +107,11 @@ a log aggregator (Datadog, CloudWatch, Loki) expects from a service. See
 |---|---|---|
 | — | 0.1.x | Initial format: agent.md, tools.json, processes, plugin.ts. `ravel.json` present but unread. |
 | **0.2** | 0.2.x | `ravel.json` `runtimeVersion` now read + checked (warn). `tools.json` gains `env[]`. Advisory lint added (memory-write, env, unknown-tool warnings). All additive — 0.1 teams validate unchanged. |
+| **0.2** | 0.3.x | **No config-format change.** A team is now an npm package: `ravel create` scaffolds a `package.json` depending on `@runravel/ravel`, and the recommended workflow is `npm install` / `npm run dev`. The runtime still compiles the same declarative surface; `package.json` is not parsed by it. |
+
+The **config version** (the declarative schema the runtime parses) is distinct from
+the **package version** — the format can stay stable across runtime releases, as 0.3.x
+shows.
 
 **Rule:** any change to this declarative surface (new field, new file, changed
 semantics) bumps the runtime minor version and adds a row here + a CHANGELOG entry.

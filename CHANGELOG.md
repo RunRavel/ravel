@@ -3,6 +3,30 @@
 All notable changes to `@runravel/ravel`. The format follows
 [Keep a Changelog](https://keepachangelog.com); versions follow semver.
 
+## 0.3.0 — unreleased
+
+Team repos are npm packages.
+
+### Changed
+
+- **`ravel create` scaffolds a `package.json`** that depends on `@runravel/ravel`
+  (pinned `^0.3`) with `dev` / `validate` / `start` scripts. The recommended
+  authoring workflow is now `npx @runravel/ravel create <name>` → `npm install`
+  → `npm run dev` — the same clone/install/run loop every JS project uses. A team
+  now pins the runtime via its lockfile, so it runs against the exact version it
+  was authored on, locally and on a hosting platform (`npm ci`). The global-CLI
+  path (`npm i -g @runravel/ravel`; `ravel serve --dir`) still works and is
+  documented as the alternative.
+- The scaffolded starter no longer grants a generic memory-write tool (it tripped
+  the 0.2 `memory-write` lint warning on a freshly created team). The Hello
+  process now just composes and reports a greeting; a clean `create` → `validate`
+  emits zero warnings.
+
+This is **not** a config-format change — `package.json` is not parsed by the
+runtime, and the declarative surface (`agent.md`/`tools.json`/`processes`/
+`ravel.json`) is unchanged. See
+[docs/config-format.md](https://github.com/RunRavel/ravel/blob/main/docs/config-format.md).
+
 ## 0.2.0 — 2026-07-17
 
 Declarative config validation + config-format versioning.

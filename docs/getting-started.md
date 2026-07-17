@@ -12,68 +12,75 @@ processes, tools, memory), see [authoring-teams.md](./authoring-teams.md).
   `ant auth login`. Ravel warns but doesn't stop without one; you'll need it
   the moment an agent actually runs.
 
-## Install
-
-```bash
-npm i -g @runravel/ravel
-```
-
-No build step — Ravel ships TypeScript and runs it via `tsx`. `ravel` is the
-installed command from here on.
-
 ## Scaffold a team
 
+A Ravel team is an **npm package** — a folder of config that depends on the
+runtime. Scaffold one without installing anything globally:
+
 ```bash
-ravel create my-team
+npx @runravel/ravel create my-team
+cd my-team
+npm install
 ```
 
 This creates a minimal, valid starter:
 
 ```
 my-team/
+  package.json               # deps: @runravel/ravel (pinned); scripts: dev/validate/start
   ravel.json                 # manifest: name, runtimeVersion, description
   agent.md                   # the team lead — owns the Hello process
   assistant/
     agent.md                 # a report the lead delegates to
-    tools.json                # grants: mem_text_get/set, defaultPolicy "ask"
+    tools.json                # its tool grants + permission policy
   processes/
-    hello.process.md          # the one playbook: write a greeting to memory
-  .gitignore                 # ignores .env and .ravel/
+    hello.process.md          # the one playbook: greet and report
+  .gitignore                 # ignores .env, .ravel/, node_modules/
 ```
 
-The lead's `agent.md` sets `autonomy: orchestrated` and a budget (`usd: 2`,
-`turns: 6`); the assistant has no budget of its own, so it inherits whatever
-the orchestrator hands it per task. This is the smallest complete shape a team
-can take — one owner, one report, one process.
+`package.json` pins the runtime (`"@runravel/ravel": "^0.3"`), so `npm install`
+here — and `npm ci` on a hosting platform later — gets the exact version this
+team was authored against. No build step — Ravel ships TypeScript and runs it
+via `tsx`. The lead's `agent.md` sets `autonomy: orchestrated` and a budget
+(`usd: 2`, `turns: 6`); the assistant inherits whatever the orchestrator hands
+it per task. This is the smallest complete shape a team can take — one owner,
+one report, one process.
+
+> No global install needed. The scaffold's `npm run` scripts (`dev`, `validate`,
+> `start`) invoke the team's own pinned `ravel`. A global `npm i -g @runravel/ravel`
+> also works if you prefer typing `ravel …` directly, but the local dependency is
+> the portable default.
 
 ## Validate
 
 ```bash
-ravel validate --dir my-team
+npm run validate           # → ravel validate --dir .
 ```
 
 Compiles the folder tree against the agent/tools/process schemas without
-running anything. You'll see this fail loudly (with a `where`/`message` per
-diagnostic) if `agent.md` frontmatter is malformed, a process names a
-non-existent owner, or `tools.json` references bad policy values. Run this
-after any manual edit — it's also what the operator console calls before
-saving a config edit.
+running anything. It fails (exit 1) with a `where`/`message` per diagnostic if
+`agent.md` frontmatter is malformed, a process names a non-existent owner, or
+`tools.json` references bad policy values, and prints `⚠` advisory warnings
+(exit 0) for lint issues like granting a generic memory-write tool. Run it
+after any edit — it's also what the operator console calls before saving, and
+what a hosting platform can gate a deploy on (`ravel validate --json`).
 
 ## Run a process once (no server)
 
 ```bash
-ravel run "Hello" --dir my-team --input who=Ravel
+npx ravel run "Hello" --dir . --input who=Ravel
 ```
 
 This boots the org in-process, runs exactly one process to completion (or
 budget/turn exhaustion), prints the result, and exits. Good for scripting and
 CI; the [CLI reference](./cli-reference.md#ravel-run-process-name-options)
-covers `--file`, `--dry-run`, and `--sync`.
+covers `--file`, `--dry-run`, and `--sync`. (Inside a team, `npx ravel` runs
+the pinned local binary.)
 
 ## Serve (console + API, long-running)
 
 ```bash
-ravel serve --dir my-team
+npm run dev                # → ravel serve --dir .
 ```
 
 ```
@@ -96,14 +103,15 @@ only when you know what's exposing it (a gateway, a container).
 
 ## What "proposals" means
 
-`assistant/tools.json` grants `mem_text_set` as `auto` (runs immediately) but
-its `defaultPolicy` is `"ask"` — anything not explicitly listed is gated. A
-gated tool call doesn't fail; it's denied at runtime and queued as a
-**Proposal**. Approve it (`ravel proposals approve <id>`, or the console) and
-the matching executor action runs deterministically — no model call involved
-in the approval step itself. This is the human-in-the-loop mechanism
-throughout Ravel: consequential actions always have a name a human can see
-and a yes/no to make.
+The starter keeps things trivial (the assistant just composes a greeting), so
+it produces no proposals. But the mechanism is central to Ravel: a tool granted
+`policy: "ask"` in `tools.json` doesn't fail when called — it's denied at
+runtime and queued as a **Proposal**. Approve it (`npx ravel proposals approve
+<id>`, or the console) and the matching executor action runs deterministically
+— no model call involved in the approval step. Consequential actions always
+have a name a human can see and a yes/no to make. See
+[examples.md](./examples.md) — `examples/acme` gates `send_email`, and
+`examples/plugin-demo` shows a plugin's own gated action end to end.
 
 ## Next steps
 
