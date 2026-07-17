@@ -73,6 +73,34 @@ Errors (malformed frontmatter/JSON, unresolved process owner, missing root `agen
 still fail `validate` (exit 1). Warnings print but exit 0. Use `ravel validate --json`
 for machine-readable output.
 
+## Worker API & logs (for hosting integrators)
+
+`GET /api/validate` and `PUT /api/files` return the **same shape** — compile
+errors and lint warnings together — so a platform can gate a deploy or show
+config health without scraping logs:
+
+```bash
+curl http://127.0.0.1:4317/api/validate
+```
+```json
+{
+  "ok": true,
+  "diagnostics": [
+    { "where": "growth/copywriter/tools.json", "severity": "warning",
+      "code": "memory-write", "message": "grants generic memory write \"mem_text_set\" — ..." }
+  ]
+}
+```
+
+`ok` is `false` only when a diagnostic has no `severity` or `severity: "error"`
+— warnings never flip it. Full HTTP surface: [architecture.md](./architecture.md#service).
+
+For logs, `ravel serve --log-format json` (or `RAVEL_LOG_FORMAT=json`) emits
+NDJSON — one `{ "at", "level", ... }` object per line, covering the audit
+stream *and* the process's own startup/warning/crash-guard output — the shape
+a log aggregator (Datadog, CloudWatch, Loki) expects from a service. See
+[cli-reference.md](./cli-reference.md#ravel-serve-options).
+
 ## Version history
 
 | Config version | Runtime | Changes |

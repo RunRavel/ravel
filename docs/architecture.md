@@ -114,6 +114,15 @@ Team-provided code tools. A team root's `plugin.ts` default-exports
   and `PUT /api/secrets` (403) for workers whose config plane is git. The server
   binds `127.0.0.1` by default (the API is auth-free); containerized workers
   behind a gateway pass `--host 0.0.0.0`. CORS is granted to loopback origins only.
+  `GET /api/validate` and `PUT /api/files` return **both** compile errors and
+  advisory lint warnings — `{ ok, diagnostics: [{ where, message, severity?, code? }] }`
+  (see [config-format.md](./config-format.md)) — so a platform can gate a deploy
+  or surface config health without scraping logs. `--log-format json` (or
+  `RAVEL_LOG_FORMAT=json`) makes the `-v` stream, and every line the process
+  itself emits (startup banner, warnings, the crash guard), NDJSON with a
+  `level` — the shape a log aggregator (Datadog/CloudWatch/Loki) expects from
+  a long-running service. `ravel.json`'s `runtimeVersion` is checked against
+  the installed runtime and warns (never blocks) on a mismatch.
 - `scheduler.ts` — per-process auto-run. Modes: **adaptive** (after each run, reads
   the orchestrator's `next_run_minutes` hint from team memory, clamped to operator
   `[min,max]`) and **cron** (standard 5-field, local time). Code-enforced rails:

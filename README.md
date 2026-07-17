@@ -65,6 +65,7 @@ Full documentation: [docs/](https://github.com/RunRavel/ravel/tree/main/docs)
 - [docs/authoring-teams.md](https://github.com/RunRavel/ravel/blob/main/docs/authoring-teams.md) — how to write a team (agents, tools, processes, plugins, scheduling).
 - [docs/cli-reference.md](https://github.com/RunRavel/ravel/blob/main/docs/cli-reference.md) — every `ravel` command and flag.
 - [docs/api-reference.md](https://github.com/RunRavel/ravel/blob/main/docs/api-reference.md) — embedding Ravel programmatically.
+- [docs/config-format.md](https://github.com/RunRavel/ravel/blob/main/docs/config-format.md) — the declarative config surface, lint warnings, and version history.
 - [docs/architecture.md](https://github.com/RunRavel/ravel/blob/main/docs/architecture.md) — how the runtime works, module by module.
 - [docs/examples.md](https://github.com/RunRavel/ravel/blob/main/docs/examples.md) — walkthroughs of the three example teams.
 - [CLAUDE.md](https://github.com/RunRavel/ravel/blob/main/CLAUDE.md) — conventions and hard rules for coding agents working on this repo.
