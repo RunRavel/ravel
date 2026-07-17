@@ -90,6 +90,17 @@ function resolveLogging(values: { verbose?: boolean; "log-format"?: string }): {
 }
 
 /**
+ * One NDJSON line for the CLI's OWN messages (not audit events — the API-key
+ * warning, the startup banner, an unhandled-rejection guard) so
+ * `--log-format json` covers everything the process emits, not just the
+ * audit trail. `message` should be clean prose (no "· " prefix, no baked-in
+ * detail) — put per-instance specifics in `data`.
+ */
+function jsonLine(level: "info" | "warn" | "error", message: string, data?: Record<string, unknown>): string {
+  return JSON.stringify({ at: new Date().toISOString(), level, message, ...(data ? { data } : {}) });
+}
+
+/**
  * Group diagnostics by `code` for compact CLI output — every lint message
  * follows `<specific clause> — <shared rule explanation>`, so splitting on the
  * first " — " lets a repeated rule (e.g. 14 "memory-write" warnings across a
@@ -153,14 +164,19 @@ async function runServe(
   // SDK can surface an AbortError asynchronously after we've already handled the
   // run; swallow those and log anything else, but keep serving — crashing would
   // lose every in-flight run and the operator's queue.
+  const logFormat = opts.logFormat ?? "pretty";
   const guard = (kind: string) => (err: unknown) => {
     const e = err as { name?: string; message?: string } | undefined;
     const msg = e?.message ?? String(err);
     if (e?.name === "AbortError" || /abort/i.test(msg)) {
-      if (verbose) process.stderr.write(`· ${kind} ignored (a run was aborted): ${msg}\n`);
+      if (verbose) {
+        const line = logFormat === "json" ? jsonLine("info", `${kind} ignored (a run was aborted)`, { kind, error: msg }) : `· ${kind} ignored (a run was aborted): ${msg}`;
+        process.stderr.write(`${line}\n`);
+      }
       return;
     }
-    process.stderr.write(`· ${kind} (service stays up): ${msg}\n`);
+    const line = logFormat === "json" ? jsonLine("error", `${kind} (service stays up)`, { kind, error: msg }) : `· ${kind} (service stays up): ${msg}`;
+    process.stderr.write(`${line}\n`);
   };
   process.on("unhandledRejection", guard("unhandledRejection"));
   process.on("uncaughtException", guard("uncaughtException"));
@@ -204,10 +220,15 @@ async function runServe(
       resolve();
     });
   });
-  stdout.write(`Ravel service on http://${host}:${port}  (org: ${root})\n`);
-  if (hasUi) stdout.write(`Operator console: http://localhost:${port}/\n`);
-  else stdout.write(`No built console found — \`cd ui && npm run build\` to serve it from this port.\n`);
-  stdout.write(`Proposals queue is async — review at /api/proposals or in the console. Ctrl-C to stop.\n`);
+  const consoleUrl = hasUi ? `http://localhost:${port}/` : null;
+  if (logFormat === "json") {
+    stdout.write(`${jsonLine("info", "Ravel service listening", { host, port, org: root, hasUi, consoleUrl })}\n`);
+  } else {
+    stdout.write(`Ravel service on http://${host}:${port}  (org: ${root})\n`);
+    if (hasUi) stdout.write(`Operator console: ${consoleUrl}\n`);
+    else stdout.write(`No built console found — \`cd ui && npm run build\` to serve it from this port.\n`);
+    stdout.write(`Proposals queue is async — review at /api/proposals or in the console. Ctrl-C to stop.\n`);
+  }
 
   await shutdownSignal();
   await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -298,14 +319,11 @@ async function main(): Promise<number> {
 
   // Load .env so ANTHROPIC_API_KEY (and friends) reach the SDK.
   await loadEnvFiles(root);
-  if (process.env["ANTHROPIC_API_KEY"] === undefined && process.env["ANTHROPIC_AUTH_TOKEN"] === undefined) {
-    stdout.write(
-      "warning: no ANTHROPIC_API_KEY found (checked env and .env in the current dir and --dir). " +
-        "Set it in .env or export it, or run `ant auth login`.\n",
-    );
-  }
-
   const logging = resolveLogging(values);
+  if (process.env["ANTHROPIC_API_KEY"] === undefined && process.env["ANTHROPIC_AUTH_TOKEN"] === undefined) {
+    const msg = "no ANTHROPIC_API_KEY found (checked env and .env in the current dir and --dir). Set it in .env or export it, or run `ant auth login`.";
+    stdout.write(`${logging.logFormat === "json" ? jsonLine("warn", msg) : `warning: ${msg}`}\n`);
+  }
 
   if (command === "serve") {
     return runServe(root, values.port ? Number(values.port) : 4317, logging.verbose, {

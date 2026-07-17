@@ -45,6 +45,12 @@ Declarative config validation + config-format versioning.
 
 - `config.warning` audit events rendered as a bare `· config.warning` in `-v`
   output (no detail) — `formatEvent` was missing a case for the new event type.
+- `--log-format json` didn't cover the CLI's own non-audit output — the missing
+  `ANTHROPIC_API_KEY` warning, `serve`'s startup banner, and the
+  unhandled-rejection/uncaughtException guard still printed plain text. All
+  three now respect `--log-format`/`RAVEL_LOG_FORMAT`; the banner collapses to
+  one structured `"Ravel service listening"` line with `host`/`port`/`org`/
+  `consoleUrl` fields instead of four lines of prose.
 
 ### Changed
 
