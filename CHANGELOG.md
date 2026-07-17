@@ -3,7 +3,7 @@
 All notable changes to `@runravel/ravel`. The format follows
 [Keep a Changelog](https://keepachangelog.com); versions follow semver.
 
-## 0.2.0 — unreleased
+## 0.2.0 — 2026-07-17
 
 Declarative config validation + config-format versioning.
 
