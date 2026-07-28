@@ -1,6 +1,33 @@
 import chokidar, { type FSWatcher, type ChokidarOptions } from "chokidar";
+import path from "node:path";
+import { realpathSync } from "node:fs";
 import { EventEmitter } from "node:events";
 import { compileRegistry, type CompileResult, type RegistrySnapshot, type Diagnostic } from "./registry.js";
+
+/**
+ * Resolve `p` through symlinks. A watched path may not exist (a delete event),
+ * so resolve the deepest existing ancestor and re-append the missing tail —
+ * enough to tell whether the *real* location is inside the state dir or escapes
+ * the repo, regardless of watch backend.
+ */
+function realResolve(p: string): string {
+  const abs = path.resolve(p);
+  let cur = abs;
+  const tail: string[] = [];
+  for (;;) {
+    try {
+      const real = realpathSync(cur);
+      return tail.length ? path.join(real, ...tail) : real;
+    } catch {
+      const parent = path.dirname(cur);
+      if (parent === cur) return abs; // reached fs root without resolving
+      tail.unshift(path.basename(cur));
+      cur = parent;
+    }
+  }
+}
+
+const isUnder = (p: string, dir: string): boolean => p === dir || p.startsWith(dir + path.sep);
 
 export interface WatcherEvents {
   /** A new valid snapshot was compiled and is now current. */
@@ -25,6 +52,10 @@ export class RegistryWatcher extends EventEmitter {
   private readonly root: string;
   private readonly debounceMs: number;
   private readonly watchOptions: Partial<ChokidarOptions>;
+  /** Realpath of the watched root — the boundary the config plane must stay within. */
+  private readonly rootReal: string;
+  /** Realpath of the runtime/state dir to ignore, if any (see `isIgnored`). */
+  private readonly runtimeDirReal: string | null;
   private version = 0;
   private lastGood: RegistrySnapshot | null = null;
   private watcher: FSWatcher | null = null;
@@ -32,7 +63,10 @@ export class RegistryWatcher extends EventEmitter {
   private compiling = false;
   private pending = false;
 
-  constructor(root: string, opts: { debounceMs?: number; watchOptions?: Partial<ChokidarOptions> } = {}) {
+  constructor(
+    root: string,
+    opts: { debounceMs?: number; watchOptions?: Partial<ChokidarOptions>; runtimeDir?: string } = {},
+  ) {
     super();
     this.root = root;
     this.debounceMs = opts.debounceMs ?? 150;
@@ -40,6 +74,28 @@ export class RegistryWatcher extends EventEmitter {
     // (e.g. test workers) and across network/container filesystems. Callers can
     // opt into it; the default uses the native backend for efficiency.
     this.watchOptions = opts.watchOptions ?? {};
+    this.rootReal = realResolve(root);
+    // The runtime/state dir (memory, audit, runs, proposals) lives at
+    // `<root>/.ravel` by default — i.e. inside the watched tree — so agent
+    // memory writes would otherwise look like config edits and force a recompile
+    // on every write. Ignore it by RESOLVED PATH, not name: a hardcoded `.ravel`
+    // breaks on the next rename and misses a `--state-dir` inside root.
+    this.runtimeDirReal = opts.runtimeDir ? realResolve(opts.runtimeDir) : null;
+  }
+
+  /**
+   * Whether the watcher should ignore a path. Beyond VCS/deps, ignore anything
+   * whose REAL (symlink-resolved) location is the state dir or escapes the repo
+   * — so agent memory writes never look like config edits, and a symlink out of
+   * the checkout (e.g. to a hosted `--state-dir`) can't drag external writes in.
+   * Realpath-based so it holds on both the native and polling watch backends.
+   */
+  private isIgnored(p: string): boolean {
+    if (/(^|[/\\])(node_modules|\.git)([/\\]|$)/.test(p)) return true;
+    const real = realResolve(p);
+    if (this.runtimeDirReal && isUnder(real, this.runtimeDirReal)) return true;
+    if (!isUnder(real, this.rootReal)) return true; // symlink escape
+    return false;
   }
 
   /** Compile once without starting the watcher. Returns the result. */
@@ -64,7 +120,10 @@ export class RegistryWatcher extends EventEmitter {
 
     this.watcher = chokidar.watch(this.root, {
       ignoreInitial: true,
-      ignored: (p: string) => /(^|[/\\])(node_modules|\.git|\.businessos)([/\\]|$)/.test(p),
+      // Don't follow symlinks out of the repo (perf + correctness on the native
+      // backend); `isIgnored` is the backend-independent guarantee.
+      followSymlinks: false,
+      ignored: (p: string) => this.isIgnored(p),
       awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 },
       ...this.watchOptions,
     });

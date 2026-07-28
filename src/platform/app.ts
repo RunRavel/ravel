@@ -119,6 +119,10 @@ export class App {
     this.observer = new Observer(this.audit, this.lifecycle, this.proposals, () => this.bus.deadLetters.length);
 
     this.watcher = new RegistryWatcher(opts.root, {
+      // Ignore the runtime/state dir so agent memory/audit writes (which land
+      // under it, by default inside the watched root) don't trigger config
+      // recompiles. Passed as a path; the watcher matches by resolved location.
+      runtimeDir: this.runtimeDir,
       ...(opts.watchOptions ? { watchOptions: opts.watchOptions } : {}),
     });
     this.watcher.on("snapshot", (snap) => this.enqueueApply(snap));

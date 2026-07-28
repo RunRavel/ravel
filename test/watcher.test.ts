@@ -32,6 +32,27 @@ function nextEvent(
   });
 }
 
+/** True if NO snapshot/invalid event fires within `ms` (i.e. no recompile). */
+function noEventWithin(w: RegistryWatcher, ms: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const fired = () => {
+      clear();
+      resolve(false);
+    };
+    const t = setTimeout(() => {
+      clear();
+      resolve(true);
+    }, ms);
+    const clear = () => {
+      clearTimeout(t);
+      w.off("snapshot", fired);
+      w.off("invalid", fired);
+    };
+    w.on("snapshot", fired);
+    w.on("invalid", fired);
+  });
+}
+
 describe("RegistryWatcher", () => {
   it("recompiles and bumps version when a child agent is added", async () => {
     const root = await makeTempOrg({ "agent.md": agentMd("CEO", { role: "ceo" }) });
@@ -78,6 +99,72 @@ describe("RegistryWatcher", () => {
     expect(result.kind).toBe("invalid");
     // Last-good is retained and unchanged.
     expect(w.current()).toBe(good);
+    expect(w.current()!.version).toBe(1);
+  });
+
+  it("ignores writes inside the runtime/state dir (memory writes are not config edits)", async () => {
+    const root = await makeTempOrg({ "agent.md": agentMd("CEO", { role: "ceo" }) });
+    roots.push(root);
+    const w = new RegistryWatcher(root, {
+      debounceMs: 30,
+      runtimeDir: path.join(root, ".ravel"), // default location: inside the watched root
+      watchOptions: { usePolling: true, interval: 25, awaitWriteFinish: false },
+    });
+    watchers.push(w);
+    await w.start();
+    expect(w.current()!.version).toBe(1);
+
+    // A memory/audit-style write under the runtime dir must NOT recompile.
+    await writeFiles(root, { ".ravel/memory/team/ceo/notes.md": "hello" });
+    expect(await noEventWithin(w, 400)).toBe(true);
+    expect(w.current()!.version).toBe(1);
+
+    // ...but a real config edit still does (proves the watcher is live, not stalled).
+    const evt = nextEvent(w);
+    await writeFiles(root, { "ops/agent.md": agentMd("Ops", { role: "ops" }) });
+    const result = await evt;
+    expect(result.kind).toBe("snapshot");
+    if (result.kind !== "snapshot") return;
+    expect(result.snapshot.version).toBe(2);
+    expect(result.snapshot.nodes.has("ops")).toBe(true);
+  });
+
+  it("ignores an explicit --state-dir that points inside the org root", async () => {
+    const root = await makeTempOrg({ "agent.md": agentMd("CEO", { role: "ceo" }) });
+    roots.push(root);
+    const w = new RegistryWatcher(root, {
+      debounceMs: 30,
+      runtimeDir: path.join(root, "state"), // custom name, still inside root
+      watchOptions: { usePolling: true, interval: 25, awaitWriteFinish: false },
+    });
+    watchers.push(w);
+    await w.start();
+
+    await writeFiles(root, { "state/audit.jsonl": '{"seq":1}\n' });
+    expect(await noEventWithin(w, 400)).toBe(true);
+    expect(w.current()!.version).toBe(1);
+  });
+
+  it("does not follow a symlink out of the repo to an external state dir", async () => {
+    const root = await makeTempOrg({ "agent.md": agentMd("CEO", { role: "ceo" }) });
+    roots.push(root);
+    // An external dir (as a hosted --state-dir would be), plus a symlink to it
+    // inside the watched checkout.
+    const external = await makeTempOrg({ "seed.txt": "x" });
+    roots.push(external);
+    await fs.symlink(external, path.join(root, "state-link"), "dir").catch(() => {
+      /* symlink perms vary; the assertion below still holds if it no-ops */
+    });
+    const w = new RegistryWatcher(root, {
+      debounceMs: 30,
+      watchOptions: { usePolling: true, interval: 25, awaitWriteFinish: false },
+    });
+    watchers.push(w);
+    await w.start();
+
+    // Changing a file in the external target must not reach the config watcher.
+    await writeFiles(external, { "changed.txt": "y" });
+    expect(await noEventWithin(w, 400)).toBe(true);
     expect(w.current()!.version).toBe(1);
   });
 

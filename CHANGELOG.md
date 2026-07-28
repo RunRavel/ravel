@@ -3,6 +3,22 @@
 All notable changes to `@runravel/ravel`. The format follows
 [Keep a Changelog](https://keepachangelog.com); versions follow semver.
 
+## 0.3.1 — unreleased
+
+### Fixed
+
+- The config watcher treated agent memory/audit writes as config edits, forcing
+  a full org recompile on every write (`GET /api/org` `version` climbed
+  continuously on an idle team). The default state dir is `<root>/.ravel` — inside
+  the watched root — but the watcher's ignore list still named the pre-0.1
+  `.businessos` and never learned the new name. It now ignores the runtime/state
+  dir by **resolved (symlink-aware) path** rather than a hardcoded name, and
+  ignores anything whose real location escapes the repo (a symlink out to a
+  hosted `--state-dir`) — robust on both the native and polling watch backends.
+  Not a correctness bug (recompiles were fingerprint-guarded no-ops), but wasted
+  a full re-parse of every agent/process file per memory write. The watcher stays
+  active under `--read-only-config` (the hosted hot-deploy path relies on it).
+
 ## 0.3.0 — unreleased
 
 Team repos are npm packages.
