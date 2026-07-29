@@ -4,8 +4,12 @@ import { emptyUsage, addUsage, type Usage, type PermissionDecision } from "../do
 /** Context a scripted program uses to simulate an agent's behavior. */
 export interface FakeContext {
   req: EngineRequest;
-  /** Attempt a tool use; routes through the runtime's decide() gate. */
-  useTool: (name: string, input: unknown, rationale?: string) => Promise<PermissionDecision>;
+  /**
+   * Attempt a tool use; routes through the runtime's decide() gate. An optional
+   * `output` simulates the tool's result so it reaches the captured toolUses
+   * (and the `tool.finished` audit event) — mirroring what SdkEngine observes.
+   */
+  useTool: (name: string, input: unknown, rationale?: string, output?: unknown) => Promise<PermissionDecision>;
   /** Report simulated token usage (also forwarded to the runtime's budget meter). */
   emitUsage: (u: Usage) => void;
   /** Resolves true once the run has been aborted (kill / budget / timeout). */
@@ -42,8 +46,8 @@ export class FakeEngine implements AgentEngine {
 
     const ctx: FakeContext = {
       req,
-      useTool: async (name, input, rationale) => {
-        toolUses.push({ name, input });
+      useTool: async (name, input, rationale, output) => {
+        toolUses.push({ name, input, ...(output !== undefined ? { output } : {}) });
         return req.decide({ name, input, ...(rationale !== undefined ? { rationale } : {}) });
       },
       emitUsage: (u) => {

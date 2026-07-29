@@ -23,6 +23,12 @@ export interface ToolContext {
 export interface EngineToolUse {
   name: string;
   input: unknown;
+  /**
+   * The tool's result, once it ran. Absent if the call was denied/never
+   * executed, or if the engine can't observe outputs. Captured for the audit
+   * trail (`tool.finished`); may be truncated by the engine to keep events lean.
+   */
+  output?: unknown;
 }
 
 /**

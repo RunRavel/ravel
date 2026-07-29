@@ -3,6 +3,34 @@
 All notable changes to `@runravel/ravel`. The format follows
 [Keep a Changelog](https://keepachangelog.com); versions follow semver.
 
+## 0.4.0 — unreleased
+
+Observability: the run/agent/audit surface now reports enough that a hosting
+platform or the console doesn't have to scrape or reconstruct. All additive —
+`apiVersion` stays `"1"`.
+
+### Added
+
+- **`GET /api/health` is now worker identity:** `{ ok, name: "ravel", version,
+  apiVersion }`. `version` is the *running* runtime (`runtimeVersion()`); may
+  differ from a checkout's installed version until the worker restarts.
+  `apiVersion` is the HTTP-contract handle, bumped only on an incompatible change.
+- **`GET /api/audit?since=&nodeId=&runId=&type=&limit=`** — a filtered read over
+  the same events the SSE channel emits (newest-last, `limit` default 1000, cap
+  5000). Collapses N `runs/:id/events` round-trips into one call.
+- **`RunSummary` (`GET /api/runs`) gains `tasks: { total, failed, aborted,
+  budget_exhausted }` and `toolCalls`** — "did anything break along the way" as
+  a dimension separate from the run `status` (a `completed` run can contain
+  recovered task failures). Not a new status enum.
+- **`AgentMetric` (`GET /api/dashboard`) gains `tasksFailed`, `p50Ms`, `meanMs`**
+  — per-agent error count and task latency, derived by pairing
+  `task.started`↔`task.finished` on `contractId`.
+- **Tool inputs/outputs in the audit trail:** `tool.started` now carries the
+  tool `input`; a new **`tool.finished { tool, input, output }`** event captures
+  outputs (from the SDK's tool_result stream; truncated to keep events lean).
+  `EngineToolUse` gains an optional `output`; `FakeEngine`'s `ctx.useTool`
+  accepts a simulated `output` for parity.
+
 ## 0.3.1 — unreleased
 
 ### Fixed

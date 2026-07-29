@@ -251,6 +251,30 @@ describe("AgentRuntime.runTask", () => {
     expect(audit.all().some((e) => e.type === "tool.started" && e.data["tool"] === "search")).toBe(true);
   });
 
+  it("records tool input on tool.started and input+output on tool.finished", async () => {
+    const { audit, approvals, killSwitch } = harness();
+    const tools: ToolsConfig = {
+      tools: [{ name: "search", policy: "auto" }],
+      mcpServers: {},
+      env: [],
+      defaultPolicy: "auto",
+    };
+    const engine = new FakeEngine(async (ctx) => {
+      await ctx.useTool("search", { q: "robots" }, undefined, { hits: 3 });
+      return "done";
+    });
+    const rt = new AgentRuntime(node({ tools }), { engine, audit, approvals, killSwitch, workdirRoot });
+    await rt.runTask(contract({ goal: "Find robotics signals" }));
+
+    const started = audit.all().find((e) => e.type === "tool.started" && e.data["tool"] === "search");
+    expect(started?.data["input"]).toEqual({ q: "robots" });
+
+    const finished = audit.all().find((e) => e.type === "tool.finished" && e.data["tool"] === "search");
+    expect(finished).toBeDefined();
+    expect(finished!.data["input"]).toEqual({ q: "robots" });
+    expect(finished!.data["output"]).toEqual({ hits: 3 });
+  });
+
   it("denies further tool use once the budget is spent", async () => {
     const { audit, approvals, killSwitch } = harness();
     const tools: ToolsConfig = {

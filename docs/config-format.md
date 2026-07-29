@@ -101,6 +101,18 @@ stream *and* the process's own startup/warning/crash-guard output — the shape
 a log aggregator (Datadog, CloudWatch, Loki) expects from a service. See
 [cli-reference.md](./cli-reference.md#ravel-serve-options).
 
+Observability reads (so you needn't reconstruct from the raw trail):
+- `GET /api/health` → `{ ok, name, version, apiVersion }` — worker identity;
+  `version` is the *running* runtime, `apiVersion` the HTTP-contract handle.
+- `GET /api/audit?since=&nodeId=&runId=&type=&limit=` — one filtered read of
+  the trail instead of N `runs/:id/events` calls.
+- `GET /api/runs` `RunSummary` carries `tasks: {total,failed,aborted,
+  budget_exhausted}` + `toolCalls` — a `completed` run can still contain
+  recovered task failures.
+- `GET /api/dashboard` `AgentMetric` carries `tasksFailed`/`p50Ms`/`meanMs`.
+- The trail records tool `input` (`tool.started`) and `output`
+  (`tool.finished`).
+
 ## Version history
 
 | Config version | Runtime | Changes |

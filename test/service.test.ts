@@ -85,7 +85,11 @@ describe("HTTP service", () => {
     const base = await boot(engine);
 
     // Read-only endpoints
-    expect(await (await fetch(`${base}/api/health`)).json()).toEqual({ ok: true });
+    const health = (await (await fetch(`${base}/api/health`)).json()) as { ok: boolean; name: string; version: string; apiVersion: string };
+    expect(health.ok).toBe(true);
+    expect(health.name).toBe("ravel");
+    expect(health.version).toMatch(/^\d+\.\d+\.\d+/); // running runtime version
+    expect(health.apiVersion).toBe("1");
     const org = (await (await fetch(`${base}/api/org`)).json()) as { nodes: Array<{ id: string }> };
     expect(org.nodes.map((n) => n.id)).toContain("growth/copywriter");
     const procs = (await (await fetch(`${base}/api/processes`)).json()) as { processes: Array<{ name: string }> };
@@ -129,8 +133,16 @@ describe("HTTP service", () => {
     expect(dash.pendingProposals).toBe(0);
 
     // The run is listed in history (survives navigation/remount in the UI).
-    const list = (await (await fetch(`${base}/api/runs`)).json()) as { runs: Array<{ runId: string; process: string; status: string }> };
-    expect(list.runs.some((r) => r.runId === runId && r.process === "Prospect Outreach" && r.status === "completed")).toBe(true);
+    const list = (await (await fetch(`${base}/api/runs`)).json()) as {
+      runs: Array<{ runId: string; process: string; status: string; tasks: { total: number; failed: number }; toolCalls: number }>;
+    };
+    const rec = list.runs.find((r) => r.runId === runId);
+    expect(rec?.process).toBe("Prospect Outreach");
+    expect(rec?.status).toBe("completed");
+    // The run dispatched one worker task that called send_email once.
+    expect(rec?.tasks.total).toBe(1);
+    expect(rec?.tasks.failed).toBe(0);
+    expect(rec?.toolCalls).toBe(1);
   });
 
   it("streams audit events over SSE (so the Activity feed populates)", async () => {
@@ -167,6 +179,39 @@ describe("HTTP service", () => {
 
     expect(text).toContain("event: audit");
     expect(text).toContain("process.started");
+  });
+
+  it("GET /api/audit returns a filtered read of the trail (by runId and type)", async () => {
+    const engine = new FakeEngine(() => "ok", [() => JSON.stringify({ done: true, summary: "done" })]);
+    const base = await boot(engine);
+    const { runId } = (await (
+      await fetch(`${base}/api/processes/${encodeURIComponent("Prospect Outreach")}/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+    ).json()) as { runId: string };
+    for (let i = 0; i < 50; i++) {
+      const r = (await (await fetch(`${base}/api/runs/${runId}`)).json()) as { status: string };
+      if (r.status !== "running") break;
+      await sleep(20);
+    }
+
+    // Filter by runId: every event belongs to that run.
+    const byRun = (await (await fetch(`${base}/api/audit?runId=${runId}`)).json()) as { events: Array<{ runId?: string; type: string }> };
+    expect(byRun.events.length).toBeGreaterThan(0);
+    expect(byRun.events.every((e) => e.runId === runId)).toBe(true);
+
+    // Filter by type: only process.finished, and it's this run's.
+    const byType = (await (await fetch(`${base}/api/audit?runId=${runId}&type=process.finished`)).json()) as {
+      events: Array<{ type: string }>;
+    };
+    expect(byType.events).toHaveLength(1);
+    expect(byType.events[0]!.type).toBe("process.finished");
+
+    // limit caps the result.
+    const capped = (await (await fetch(`${base}/api/audit?limit=1`)).json()) as { events: unknown[] };
+    expect(capped.events).toHaveLength(1);
   });
 
   it("reconstructs chat history from the audit trail", async () => {
@@ -281,7 +326,7 @@ describe("HTTP service", () => {
     expect((await fetch(`${base}/assets/missing.js`)).status).toBe(404);
 
     // API routes still win over static serving.
-    expect(await (await fetch(`${base}/api/health`)).json()).toEqual({ ok: true });
+    expect(((await (await fetch(`${base}/api/health`)).json()) as { ok: boolean }).ok).toBe(true);
   });
 
   it("grants CORS only to loopback origins (auth-free API must not be browser-drivable cross-site)", async () => {

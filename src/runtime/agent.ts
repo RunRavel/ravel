@@ -379,7 +379,7 @@ export class AgentRuntime {
         await this.deps.audit.append("tool.started", {
           nodeId: this.node.id,
           ...(runId !== undefined ? { runId } : {}),
-          data: { tool: use.name },
+          data: { tool: use.name, input: use.input },
         });
         const policy = policyForTool(this.node.tools, use.name);
         const result = await this.deps.approvals.decide({
@@ -407,6 +407,15 @@ export class AgentRuntime {
     try {
       const engineResult = await this.deps.engine.run(request);
       meter.recordTurn();
+      // Record each observed tool call's input+output for the durable trail
+      // (tool.started only carried the name/input, pre-execution).
+      for (const t of engineResult.toolUses) {
+        await this.deps.audit.append("tool.finished", {
+          nodeId: this.node.id,
+          ...(runId !== undefined ? { runId } : {}),
+          data: { tool: t.name, input: t.input, ...(t.output !== undefined ? { output: t.output } : {}) },
+        });
+      }
       return {
         text: engineResult.text,
         // The engine's own total is authoritative (SDK total_cost_usd + cache

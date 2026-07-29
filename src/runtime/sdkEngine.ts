@@ -93,6 +93,29 @@ function toSdkMcpServer(spec: McpServerSpec, nodeEnv: Record<string, string>): M
   };
 }
 
+/** Max chars of a captured tool output kept on the audit event, so it stays lean. */
+const MAX_TOOL_OUTPUT = 4000;
+
+/** A content array from an SDK message, defensively narrowed to inspectable blocks. */
+function contentBlocks(content: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(content) ? (content.filter((b) => b && typeof b === "object") as Array<Record<string, unknown>>) : [];
+}
+
+/** Flatten a tool_result's `content` (string, or an array of text/other blocks) to a truncated string. */
+function toolResultText(content: unknown): string {
+  let text: string;
+  if (typeof content === "string") {
+    text = content;
+  } else if (Array.isArray(content)) {
+    text = content
+      .map((b) => (b && typeof b === "object" && "text" in b ? String((b as { text: unknown }).text) : JSON.stringify(b)))
+      .join("");
+  } else {
+    text = JSON.stringify(content ?? "");
+  }
+  return text.length > MAX_TOOL_OUTPUT ? text.slice(0, MAX_TOOL_OUTPUT) + "…" : text;
+}
+
 /**
  * The production AgentEngine: drives the Claude Agent SDK's agent loop.
  *
@@ -127,7 +150,11 @@ export class SdkEngine implements AgentEngine {
     if (req.signal.aborted) abortController.abort();
     else req.signal.addEventListener("abort", () => abortController.abort(), { once: true });
 
-    const toolUses: EngineToolUse[] = [];
+    // Tool calls, correlated by the SDK's tool_use id so inputs (from the
+    // assistant's tool_use blocks) pair with outputs (from the following
+    // tool_result blocks) even when several run in parallel. `canUseTool` is
+    // left to do only the permission gate.
+    const toolsById = new Map<string, EngineToolUse>();
 
     const options: Options = {
       model: req.model,
@@ -141,7 +168,6 @@ export class SdkEngine implements AgentEngine {
       mcpServers: assembleMcpServers(req),
       permissionMode: "default",
       canUseTool: async (toolName, input) => {
-        toolUses.push({ name: toolName, input });
         const decision = await req.decide({ name: toolName, input });
         if (decision === "allow") {
           return { behavior: "allow", updatedInput: input };
@@ -163,6 +189,12 @@ export class SdkEngine implements AgentEngine {
     try {
       for await (const message of query({ prompt: req.prompt, options })) {
         if (message.type === "assistant") {
+          // Record each tool_use block (id → name/input) as the model emits it.
+          for (const block of contentBlocks(message.message.content)) {
+            if (block.type === "tool_use" && typeof block.id === "string") {
+              toolsById.set(block.id, { name: String(block.name ?? ""), input: block.input });
+            }
+          }
           // Report this turn's usage (cache-aware) so the runtime can enforce
           // budgets mid-run and surface cache reads/writes.
           const u = message.message.usage;
@@ -176,6 +208,14 @@ export class SdkEngine implements AgentEngine {
                 u.cache_creation_input_tokens ?? 0,
               ),
             );
+          }
+        } else if (message.type === "user") {
+          // Tool results arrive as tool_result blocks referencing a tool_use id.
+          for (const block of contentBlocks(message.message.content)) {
+            if (block.type === "tool_result" && typeof block.tool_use_id === "string") {
+              const entry = toolsById.get(block.tool_use_id);
+              if (entry) entry.output = toolResultText(block.content);
+            }
           }
         } else if (message.type === "result") {
           finalText = message.subtype === "success" ? message.result : "";
@@ -195,6 +235,7 @@ export class SdkEngine implements AgentEngine {
         }
       }
     } catch (err) {
+      const toolUses = [...toolsById.values()];
       if (abortController.signal.aborted) {
         return { text: finalText, usage, stopReason: "aborted", toolUses };
       }
@@ -208,6 +249,6 @@ export class SdkEngine implements AgentEngine {
     }
 
     if (abortController.signal.aborted) stopReason = "aborted";
-    return { text: finalText, usage, stopReason, toolUses, ...(error ? { error } : {}) };
+    return { text: finalText, usage, stopReason, toolUses: [...toolsById.values()], ...(error ? { error } : {}) };
   }
 }

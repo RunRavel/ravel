@@ -5,12 +5,20 @@ import type { App } from "../platform/app.js";
 import type { EmittingAudit } from "../trust/emittingAudit.js";
 import { compileRegistry, type Diagnostic } from "../control-plane/registry.js";
 import { lintRegistry } from "../control-plane/lint.js";
+import { runtimeVersion } from "../domain/version.js";
 import { newId } from "../domain/ids.js";
 import { ENV_KEY_RE } from "../secrets/store.js";
 import type { ProcessRunResult } from "../orchestrator/orchestrator.js";
 import { Scheduler } from "./scheduler.js";
 
 const MAX_BODY = 32 * 1024 * 1024; // 32 MB (base64 file uploads)
+
+/**
+ * Version of the worker HTTP contract (`/api/*` + SSE), surfaced at
+ * `GET /api/health`. Independent of the package version: bump only when the
+ * surface changes incompatibly; additive fields/endpoints don't bump it.
+ */
+const API_VERSION = "1";
 
 interface RunRecord {
   runId: string;
@@ -72,7 +80,13 @@ export function createServer(deps: ServerDeps): http.Server {
     const m = req.method ?? "GET";
 
     // --- read-only state -----------------------------------------------------
-    if (m === "GET" && url.pathname === "/api/health") return sendJson(res, 200, { ok: true });
+    // Health doubles as worker identity: `version` is the running runtime (may
+    // differ from a checkout's installed version until the worker restarts);
+    // `apiVersion` is the HTTP-surface contract handle, bumped on an
+    // incompatible change (additive fields don't bump it).
+    if (m === "GET" && url.pathname === "/api/health") {
+      return sendJson(res, 200, { ok: true, name: "ravel", version: runtimeVersion(), apiVersion: API_VERSION });
+    }
     if (m === "GET" && url.pathname === "/api/org") return sendJson(res, 200, serializeOrg(app));
     if (m === "GET" && url.pathname === "/api/dashboard") return sendJson(res, 200, app.dashboard());
     if (m === "GET" && url.pathname === "/api/processes") {
@@ -91,6 +105,29 @@ export function createServer(deps: ServerDeps): http.Server {
 
     // --- live event stream (SSE) --------------------------------------------
     if (m === "GET" && url.pathname === "/api/events") return streamEvents(res);
+
+    // --- audit query (a filtered read over the same events the SSE emits) ----
+    // Lets a consumer fold per-agent/per-run history in one call instead of
+    // N `runs/:id/events` round-trips. Newest-last, capped by `limit`.
+    if (m === "GET" && url.pathname === "/api/audit") {
+      const since = url.searchParams.get("since");
+      const sinceMs = since ? Date.parse(since) : NaN;
+      const nodeId = url.searchParams.get("nodeId");
+      const runId = url.searchParams.get("runId");
+      const type = url.searchParams.get("type");
+      const limitRaw = Number(url.searchParams.get("limit"));
+      const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 5000) : 1000;
+      let matched = events.all().filter((e) => {
+        if (!Number.isNaN(sinceMs) && Date.parse(e.at) < sinceMs) return false;
+        if (nodeId !== null && (e.nodeId ?? "") !== nodeId) return false;
+        if (runId !== null && e.runId !== runId) return false;
+        if (type !== null && e.type !== type) return false;
+        return true;
+      });
+      // Keep the newest `limit` events, returned oldest-first (like the SSE backfill).
+      if (matched.length > limit) matched = matched.slice(matched.length - limit);
+      return sendJson(res, 200, { events: matched });
+    }
 
     // --- mutations -----------------------------------------------------------
     if (m === "POST" && url.pathname === "/api/chat") {
@@ -277,6 +314,15 @@ export function createServer(deps: ServerDeps): http.Server {
     usd?: number;
     error?: string;
     inputs?: Record<string, unknown>;
+    /**
+     * Task-status breakdown for the run. `status` above answers "did the owner
+     * achieve the goal"; this answers "did anything break along the way" — a
+     * `completed` run can still contain failed tasks the orchestrator recovered
+     * from. Derived from `task.finished` events; not a status enum.
+     */
+    tasks: { total: number; failed: number; aborted: number; budget_exhausted: number };
+    /** Count of tool calls in the run (`tool.started` events). */
+    toolCalls: number;
   }
 
   /**
@@ -300,6 +346,8 @@ export function createServer(deps: ServerDeps): http.Server {
           owner: e.nodeId ?? "",
           status: "running",
           startedAt: e.at,
+          tasks: { total: 0, failed: 0, aborted: 0, budget_exhausted: 0 },
+          toolCalls: 0,
           ...(e.data["inputs"] ? { inputs: e.data["inputs"] as Record<string, unknown> } : {}),
         });
       } else if (e.type === "process.finished") {
@@ -311,6 +359,18 @@ export function createServer(deps: ServerDeps): http.Server {
           const usage = e.data["usage"] as { usd?: number } | undefined;
           if (usage) r.usd = usage.usd;
         }
+      } else if (e.type === "task.finished") {
+        const r = byId.get(e.runId);
+        if (r) {
+          r.tasks.total += 1;
+          const s = String(e.data["status"] ?? "");
+          if (s === "failed") r.tasks.failed += 1;
+          else if (s === "aborted") r.tasks.aborted += 1;
+          else if (s === "budget_exhausted") r.tasks.budget_exhausted += 1;
+        }
+      } else if (e.type === "tool.started") {
+        const r = byId.get(e.runId);
+        if (r) r.toolCalls += 1;
       } else if (e.type === "run.dismissed") {
         dismissed.add(e.runId);
       }

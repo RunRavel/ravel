@@ -151,6 +151,12 @@ export function formatEvent(e: AuditEvent): string {
     case "tool.dry_run":
       detail = `tool=${d["tool"]}`;
       break;
+    case "tool.finished": {
+      const out = d["output"];
+      const outStr = out === undefined ? "" : ` → ${String(typeof out === "string" ? out : JSON.stringify(out)).slice(0, 80).replace(/\s+/g, " ")}`;
+      detail = `tool=${d["tool"]}${outStr}`;
+      break;
+    }
     case "message.deadletter":
       detail = `reason=${d["reason"]}`;
       break;

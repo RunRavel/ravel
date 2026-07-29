@@ -123,6 +123,13 @@ Team-provided code tools. A team root's `plugin.ts` default-exports
   `level` — the shape a log aggregator (Datadog/CloudWatch/Loki) expects from
   a long-running service. `ravel.json`'s `runtimeVersion` is checked against
   the installed runtime and warns (never blocks) on a mismatch.
+- **Observability surface** (so consumers needn't reconstruct): `GET /api/health`
+  reports worker identity `{ ok, name, version, apiVersion }`; `GET /api/audit`
+  is a filtered read of the trail (`since`/`nodeId`/`runId`/`type`/`limit`);
+  `RunSummary` carries a `tasks` status breakdown + `toolCalls` (a `completed`
+  run can still contain recovered task failures); `AgentMetric` carries
+  `tasksFailed`/`p50Ms`/`meanMs`; and the trail records tool `input`
+  (`tool.started`) and `output` (`tool.finished`).
 - `scheduler.ts` — per-process auto-run. Modes: **adaptive** (after each run, reads
   the orchestrator's `next_run_minutes` hint from team memory, clamped to operator
   `[min,max]`) and **cron** (standard 5-field, local time). Code-enforced rails:
