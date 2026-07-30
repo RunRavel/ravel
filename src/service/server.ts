@@ -111,15 +111,22 @@ export function createServer(deps: ServerDeps): http.Server {
     // N `runs/:id/events` round-trips. Newest-last, capped by `limit`.
     if (m === "GET" && url.pathname === "/api/audit") {
       const since = url.searchParams.get("since");
-      const sinceMs = since ? Date.parse(since) : NaN;
+      // A provided-but-unparseable `since` is a client error, not a silent
+      // "return everything" (which is what ignoring the NaN would do).
+      const sinceMs = since !== null ? Date.parse(since) : null;
+      if (sinceMs !== null && Number.isNaN(sinceMs)) {
+        return sendJson(res, 400, { error: "invalid 'since' (expected an ISO timestamp)" });
+      }
       const nodeId = url.searchParams.get("nodeId");
       const runId = url.searchParams.get("runId");
       const type = url.searchParams.get("type");
       const limitRaw = Number(url.searchParams.get("limit"));
       const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 5000) : 1000;
       let matched = events.all().filter((e) => {
-        if (!Number.isNaN(sinceMs) && Date.parse(e.at) < sinceMs) return false;
-        if (nodeId !== null && (e.nodeId ?? "") !== nodeId) return false;
+        if (sinceMs !== null && Date.parse(e.at) < sinceMs) return false;
+        // Match the node id exactly: `?nodeId=` selects the root node (whose id
+        // is ""), NOT node-less system events (which have no nodeId at all).
+        if (nodeId !== null && e.nodeId !== nodeId) return false;
         if (runId !== null && e.runId !== runId) return false;
         if (type !== null && e.type !== type) return false;
         return true;

@@ -129,12 +129,13 @@ export class Observer {
   }
 }
 
-/** Nearest-rank percentile of `values` (ms), or null if empty. */
+/** Nearest-rank percentile of `values` (ms), or null if empty. `p` in [0,100]. */
 function percentile(values: number[], p: number): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);
-  const rank = Math.ceil((p / 100) * sorted.length);
-  return sorted[Math.min(rank, sorted.length) - 1]!;
+  // clamp rank to [1, length] so p=0 doesn't index -1 and p=100 stays in bounds.
+  const rank = Math.min(Math.max(1, Math.ceil((p / 100) * sorted.length)), sorted.length);
+  return sorted[rank - 1]!;
 }
 
 /** Rounded arithmetic mean of `values` (ms), or null if empty. */

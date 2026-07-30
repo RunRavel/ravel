@@ -212,6 +212,18 @@ describe("HTTP service", () => {
     // limit caps the result.
     const capped = (await (await fetch(`${base}/api/audit?limit=1`)).json()) as { events: unknown[] };
     expect(capped.events).toHaveLength(1);
+
+    // nodeId="" selects the root node (id ""), NOT node-less system events.
+    // process.finished is node-less; a root agent.spawned has nodeId "".
+    const rootOnly = (await (await fetch(`${base}/api/audit?nodeId=`)).json()) as {
+      events: Array<{ nodeId?: string; type: string }>;
+    };
+    expect(rootOnly.events.length).toBeGreaterThan(0);
+    expect(rootOnly.events.every((e) => e.nodeId === "")).toBe(true);
+    expect(rootOnly.events.some((e) => e.type === "process.finished")).toBe(false); // node-less, excluded
+
+    // A malformed `since` is a 400, not a silent unfiltered dump.
+    expect((await fetch(`${base}/api/audit?since=not-a-date`)).status).toBe(400);
   });
 
   it("reconstructs chat history from the audit trail", async () => {
