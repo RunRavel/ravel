@@ -3,7 +3,7 @@
 All notable changes to `@runravel/ravel`. The format follows
 [Keep a Changelog](https://keepachangelog.com); versions follow semver.
 
-## 0.4.0 — unreleased
+## 0.4.0 — 2026-08-01
 
 Observability: the run/agent/audit surface now reports enough that a hosting
 platform or the console doesn't have to scrape or reconstruct. All additive —
@@ -31,7 +31,7 @@ platform or the console doesn't have to scrape or reconstruct. All additive —
   `EngineToolUse` gains an optional `output`; `FakeEngine`'s `ctx.useTool`
   accepts a simulated `output` for parity.
 
-## 0.3.1 — unreleased
+## 0.3.1 — 2026-07-28
 
 ### Fixed
 
@@ -47,7 +47,7 @@ platform or the console doesn't have to scrape or reconstruct. All additive —
   a full re-parse of every agent/process file per memory write. The watcher stays
   active under `--read-only-config` (the hosted hot-deploy path relies on it).
 
-## 0.3.0 — unreleased
+## 0.3.0 — 2026-07-17
 
 Team repos are npm packages.
 
