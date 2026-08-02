@@ -44,6 +44,22 @@ describe("Observer — per-agent error + latency", () => {
     expect(agent.meanMs).toBeNull();
   });
 
+  it("attributes process.turn usage to the owner node without counting it as a task (ask #14)", () => {
+    const audit = new InMemoryAudit();
+    audit.hydrate([
+      ev(1, "2026-01-01T00:00:00.000Z", "process.turn", { turn: 1, usage: { inputTokens: 500, outputTokens: 100, usd: 0.01 } }, "worker"),
+      ev(2, "2026-01-01T00:00:01.000Z", "task.started", { contractId: "c1", goal: "g" }, "worker"),
+      ev(3, "2026-01-01T00:00:01.200Z", "task.finished", { contractId: "c1", status: "completed", usage: { inputTokens: 1000, outputTokens: 200, usd: 0.02 } }, "worker"),
+    ]);
+    const obs = new Observer(audit, fakeLifecycle("worker"), noProposals);
+    const snapshot = obs.snapshot();
+
+    const agent = snapshot.agents.find((a) => a.nodeId === "worker")!;
+    expect(agent.usage.inputTokens).toBe(1500); // planner (500) + task (1000)
+    expect(agent.tasksRun).toBe(1); // the planning turn is not a dispatched task
+    expect(snapshot.totalUsage.inputTokens).toBe(1500);
+  });
+
   it("counts aborted and budget_exhausted as failures", () => {
     const audit = new InMemoryAudit();
     audit.hydrate([

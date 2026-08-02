@@ -129,7 +129,8 @@ Team-provided code tools. A team root's `plugin.ts` default-exports
   is a filtered read of the trail (`since`/`nodeId`/`runId`/`type`/`limit`);
   `RunSummary` carries a `tasks` status breakdown + `toolCalls` (a `completed`
   run can still contain recovered task failures); `AgentMetric` carries
-  `tasksFailed`/`p50Ms`/`meanMs`; and the trail records tool `input`
+  `tasksFailed`/`p50Ms`/`meanMs` and a `usage` that now includes the owner's own
+  planning turns, not just dispatched tasks; and the trail records tool `input`
   (`tool.started`) and `output` (`tool.finished`).
 - `scheduler.ts` — per-process auto-run. Modes: **adaptive** (after each run, reads
   the orchestrator's `next_run_minutes` hint from team memory, clamped to operator

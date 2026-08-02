@@ -69,6 +69,13 @@ export class Observer {
       if (e.type === "task.started") {
         const id = e.data["contractId"];
         if (typeof id === "string") startAt.set(id, Date.parse(e.at));
+      } else if (e.type === "process.turn" && e.nodeId !== undefined) {
+        // The owner's planning turn — attribute its cost to the owner node, same
+        // as a dispatched task's, but WITHOUT counting it as a task (no
+        // tasksRun/tasksFailed/latency impact: it isn't a dispatched contract).
+        const u = (e.data["usage"] as Usage | undefined) ?? emptyUsage();
+        perNodeUsage.set(e.nodeId, addUsage(perNodeUsage.get(e.nodeId) ?? emptyUsage(), u));
+        totalUsage = addUsage(totalUsage, u);
       } else if (e.type === "task.finished" && e.nodeId !== undefined) {
         const u = (e.data["usage"] as Usage | undefined) ?? emptyUsage();
         perNodeUsage.set(e.nodeId, addUsage(perNodeUsage.get(e.nodeId) ?? emptyUsage(), u));

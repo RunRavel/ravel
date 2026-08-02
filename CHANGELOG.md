@@ -29,6 +29,18 @@ bind instead of surfacing a crash loop.
   included, since seeing it would require importing team code. See
   [config-format.md](./docs/config-format.md#declared-env-inventory).
 
+### Fixed
+
+- **Planner cost was attributed to no agent (ask #14).** The owning manager's
+  own planning turn (`owner.ask()` inside `EnginePlanner`) never emitted a
+  `task.started`/`task.finished` pair, so `GET /api/dashboard`'s per-agent
+  `usage` excluded it — on a real team this was measured at ~77% of actual
+  run spend. `process.turn` audit events now carry the turn's `usage`, and
+  `Observer.snapshot()` folds it into the owning node's `AgentMetric.usage`
+  and into `totalUsage`, so the per-agent breakdown and the team-wide total
+  can finally reconcile. Deliberately does **not** count a planning turn as a
+  task — `tasksRun`/`tasksFailed`/latency percentiles are unaffected.
+
 ## 0.4.0 — 2026-08-01
 
 Observability: the run/agent/audit surface now reports enough that a hosting

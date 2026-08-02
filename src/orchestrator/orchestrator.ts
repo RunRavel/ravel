@@ -174,6 +174,10 @@ export class Orchestrator {
           done: plan.done,
           taskCount: plan.tasks.length,
           assignees: plan.tasks.map((t) => t.assigneeRole),
+          // The owner's own planning cost — attributed to it here so the dashboard's
+          // per-agent usage isn't missing the ~majority of spend that a dispatch-only
+          // view (task.started/finished) never sees (ask #14).
+          usage: plan.usage,
         },
       });
 

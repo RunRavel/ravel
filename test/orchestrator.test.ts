@@ -98,6 +98,35 @@ describe("Orchestrator (injected planner)", () => {
     expect(result.turns).toBe(2);
   });
 
+  it("attributes the planner's own usage to the owner node via process.turn (ask #14)", async () => {
+    const engine = new FakeEngine(() => "did the research");
+    const { snapshot, lifecycle, audit } = await setup(engine);
+    const plannerUsage = { ...emptyUsage(), inputTokens: 500, outputTokens: 100, usd: 0.01 };
+    let turn = 0;
+    const planner: Planner = {
+      async plan(): Promise<Plan> {
+        turn += 1;
+        if (turn === 1) {
+          return {
+            done: false,
+            tasks: [{ assigneeRole: "researcher", goal: "Research prospect", definitionOfDone: "notes exist" }],
+            usage: plannerUsage,
+          };
+        }
+        return { done: true, summary: "done", tasks: [], usage: plannerUsage };
+      },
+    };
+    const orch = new Orchestrator({ lifecycle, planner, audit });
+    await orch.runProcess(snapshot.processes[0]!, snapshot);
+
+    const turns = audit.all().filter((e) => e.type === "process.turn");
+    expect(turns).toHaveLength(2);
+    for (const t of turns) {
+      expect(t.nodeId).toBe(snapshot.processes[0]!.ownerNodeId);
+      expect(t.data["usage"]).toEqual(plannerUsage);
+    }
+  });
+
   it("records an unrouted task when a role has no agent", async () => {
     const engine = new FakeEngine(() => "x");
     const { snapshot, lifecycle, audit } = await setup(engine);

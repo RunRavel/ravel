@@ -154,6 +154,11 @@ Observability reads (so you needn't reconstruct from the raw trail):
 - `GET /api/dashboard` `AgentMetric` carries `tasksFailed`/`p50Ms`/`meanMs`.
 - The trail records tool `input` (`tool.started`) and `output`
   (`tool.finished`).
+- `AgentMetric.usage` and `totalUsage` include the owning agent's own planning
+  turns (`process.turn` events now carry `usage`), not just dispatched tasks —
+  previously the planner's cost (often the majority of a run's spend) was
+  attributed to no agent and excluded from the team-wide total. `tasksRun` is
+  unaffected — a planning turn is not a dispatched task.
 
 ## Version history
 
