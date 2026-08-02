@@ -3,7 +3,7 @@
 All notable changes to `@runravel/ravel`. The format follows
 [Keep a Changelog](https://keepachangelog.com); versions follow semver.
 
-## 0.5.0 — unreleased
+## 0.5.0 — 2026-08-02
 
 Onboarding: the runtime can now report which env keys a checkout declares it
 needs, so a hosting platform can tell a user *before* deploy which secrets to
