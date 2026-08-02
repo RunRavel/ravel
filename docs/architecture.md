@@ -115,9 +115,10 @@ Team-provided code tools. A team root's `plugin.ts` default-exports
   binds `127.0.0.1` by default (the API is auth-free); containerized workers
   behind a gateway pass `--host 0.0.0.0`. CORS is granted to loopback origins only.
   `GET /api/validate` and `PUT /api/files` return **both** compile errors and
-  advisory lint warnings — `{ ok, diagnostics: [{ where, message, severity?, code? }] }`
-  (see [config-format.md](./config-format.md)) — so a platform can gate a deploy
-  or surface config health without scraping logs. `--log-format json` (or
+  advisory lint warnings — `{ ok, diagnostics: [{ where, message, severity?, code? }],
+  declaredEnv: [{ nodePath, key }] }` (see [config-format.md](./config-format.md)) —
+  so a platform can gate a deploy, surface config health, or tell a user which
+  env keys a checkout declares it needs, without scraping logs. `--log-format json` (or
   `RAVEL_LOG_FORMAT=json`) makes the `-v` stream, and every line the process
   itself emits (startup banner, warnings, the crash guard), NDJSON with a
   `level` — the shape a log aggregator (Datadog/CloudWatch/Loki) expects from

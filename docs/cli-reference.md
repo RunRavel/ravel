@@ -35,9 +35,11 @@ against the zod schemas and reports diagnostics — no agents run. Prints `✗`
 `runtimeVersion` mismatch), grouped by rule so a repeated warning across many
 agents prints its explanation once. Exit `1` if any error, `0` if only warnings
 (or clean). `--json` emits one JSON object (`ok`, `nodes`, `processCount`,
-`diagnostics` — each with `where`/`message`/`severity`/`code`) instead, for
-CI/scripting. Safe to run in CI. See [config-format.md](./config-format.md) for
-the full warning list.
+`diagnostics` — each with `where`/`message`/`severity`/`code` —, and
+`declaredEnv` — `{ nodePath, key }[]`, every env key the config declares a
+node needs) instead, for CI/scripting. Safe to run in CI. See
+[config-format.md](./config-format.md) for the full warning list and the
+`declaredEnv` contract.
 
 ## `ravel run <process-name> [options]`
 

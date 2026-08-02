@@ -5,6 +5,7 @@ import type { App } from "../platform/app.js";
 import type { EmittingAudit } from "../trust/emittingAudit.js";
 import { compileRegistry, type Diagnostic } from "../control-plane/registry.js";
 import { lintRegistry } from "../control-plane/lint.js";
+import { declaredEnv, type DeclaredEnvEntry } from "../control-plane/declaredEnv.js";
 import { runtimeVersion } from "../domain/version.js";
 import { newId } from "../domain/ids.js";
 import { ENV_KEY_RE } from "../secrets/store.js";
@@ -300,14 +301,14 @@ export function createServer(deps: ServerDeps): http.Server {
    * would surface — the metadata a hosting platform or the console needs to
    * show warnings without scraping stderr.
    */
-  async function compileAndLint(): Promise<{ ok: boolean; diagnostics: Diagnostic[] }> {
+  async function compileAndLint(): Promise<{ ok: boolean; diagnostics: Diagnostic[]; declaredEnv?: DeclaredEnvEntry[] }> {
     const result = await compileRegistry(orgRoot, ++compileVersion);
     if (!result.ok || !result.snapshot) return { ok: false, diagnostics: result.diagnostics };
     const warnings = await lintRegistry(result.snapshot, {
       secrets: app.secrets,
       pluginToolNamesByNode: (nodeId) => (app.plugins.forNode(nodeId)?.tools ?? []).map((t) => t.name),
     });
-    return { ok: true, diagnostics: [...result.diagnostics, ...warnings] };
+    return { ok: true, diagnostics: [...result.diagnostics, ...warnings], declaredEnv: declaredEnv(result.snapshot) };
   }
 
   interface RunSummary {

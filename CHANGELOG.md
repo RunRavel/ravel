@@ -3,6 +3,32 @@
 All notable changes to `@runravel/ravel`. The format follows
 [Keep a Changelog](https://keepachangelog.com); versions follow semver.
 
+## 0.5.0 — unreleased
+
+Onboarding: the runtime can now report which env keys a checkout declares it
+needs, so a hosting platform can tell a user *before* deploy which secrets to
+bind instead of surfacing a crash loop.
+
+### Added
+
+- **`declaredEnv`** — every env key a node's `tools.json` names (its own
+  `env[]`, plus any key referenced by its `mcpServers`: a stdio server's
+  `env[]` names or a `${KEY}` substituted into an http/sse header), as
+  `{ nodePath, key }[]` (`nodePath` root-relative, `""` for the team root).
+  Derived purely from the compiled registry snapshot — no `plugin.ts` import,
+  so it works in a bare checkout with no `node_modules` installed, same as
+  `validate`. Surfaced three ways, all additive:
+  - `ravel validate --json` gains a `declaredEnv` field.
+  - `GET /api/validate` (and `PUT /api/files`) gain the same field.
+  - Exported from the package root: `declaredEnv(snapshot)` /
+    `DeclaredEnvEntry`.
+
+  This is a **best-effort hint, not a complete inventory** — a plugin tool
+  handler can read `process.env` directly without declaring it, and a
+  plugin's own `env: string[]` (a separate declaration in `plugin.ts`) isn't
+  included, since seeing it would require importing team code. See
+  [config-format.md](./docs/config-format.md#declared-env-inventory).
+
 ## 0.4.0 — 2026-08-01
 
 Observability: the run/agent/audit surface now reports enough that a hosting

@@ -12,6 +12,7 @@ import { EmittingAudit } from "../trust/emittingAudit.js";
 import { JsonlAudit, type LogFormat } from "../trust/audit.js";
 import { compileRegistry, type Diagnostic } from "../control-plane/registry.js";
 import { lintRegistry } from "../control-plane/lint.js";
+import { declaredEnv } from "../control-plane/declaredEnv.js";
 import { parseDotEnv, SecretStore } from "../secrets/store.js";
 import type { ApprovalRequest, Usage } from "../domain/types.js";
 import { totalTokens } from "../domain/types.js";
@@ -46,7 +47,8 @@ Options:
                       "level" field — for log aggregators). Implies --verbose.
                       Also settable via RAVEL_LOG_FORMAT.
   --json              validate: emit one JSON object (ok, nodes, diagnostics with
-                      code/severity) instead of human-readable text
+                      code/severity, declaredEnv with nodePath/key) instead of
+                      human-readable text
 
 Example:
   ravel create my-team && ravel serve --dir my-team
@@ -285,6 +287,7 @@ async function main(): Promise<number> {
           nodes: [...result.snapshot.nodes.keys()],
           processCount: result.snapshot.processes.length,
           diagnostics: warnings,
+          declaredEnv: declaredEnv(result.snapshot),
         })}\n`,
       );
       return 0;

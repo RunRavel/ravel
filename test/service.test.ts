@@ -410,8 +410,9 @@ describe("HTTP service", () => {
     expect(badPut.status).toBe(400);
 
     // validate returns diagnostics shape
-    const v = (await (await fetch(`${base}/api/validate`)).json()) as { ok: boolean };
+    const v = (await (await fetch(`${base}/api/validate`)).json()) as { ok: boolean; declaredEnv?: Array<{ nodePath: string; key: string }> };
     expect(v.ok).toBe(true);
+    expect(Array.isArray(v.declaredEnv)).toBe(true);
   });
 
   it("/api/validate and PUT /api/files surface lint warnings (severity + code), not just compile errors", async () => {

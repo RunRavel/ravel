@@ -42,8 +42,12 @@ export const LINT_CODES = {
 /** Matches `${KEY}` references (same shape the SDK substitutes in headers). */
 const ENV_REF_RE = /\$\{([A-Z_][A-Z0-9_]*)\}/g;
 
-/** All env keys a node's mcpServers reference or forward (statically discoverable). */
-function referencedEnvKeys(node: RegistryNode): { httpRefs: Set<string>; stdioNames: Set<string> } {
+/**
+ * All env keys a node's mcpServers reference or forward (statically discoverable).
+ * Exported for `declaredEnv.ts`, which reuses it to build the platform-facing
+ * env inventory without duplicating the mcpServers-scanning logic.
+ */
+export function referencedEnvKeys(node: RegistryNode): { httpRefs: Set<string>; stdioNames: Set<string> } {
   const httpRefs = new Set<string>();
   const stdioNames = new Set<string>();
   for (const spec of Object.values(node.tools.mcpServers)) {

@@ -40,6 +40,8 @@ export type { CatalogEntry, ToolKind, ToolAccess } from "./schemas/catalog.js";
 export { lintRegistry, LINT_CODES } from "./control-plane/lint.js";
 export type { LintContext } from "./control-plane/lint.js";
 export type { Diagnostic } from "./control-plane/registry.js";
+export { declaredEnv } from "./control-plane/declaredEnv.js";
+export type { DeclaredEnvEntry } from "./control-plane/declaredEnv.js";
 export { parseManifest, satisfiesRange } from "./schemas/manifest.js";
 export type { Manifest } from "./schemas/manifest.js";
 export { runtimeVersion } from "./domain/version.js";

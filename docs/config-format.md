@@ -73,6 +73,45 @@ Errors (malformed frontmatter/JSON, unresolved process owner, missing root `agen
 still fail `validate` (exit 1). Warnings print but exit 0. Use `ravel validate --json`
 for machine-readable output.
 
+## Declared env inventory
+
+`declaredEnv(snapshot)` (exported from the package root) returns every env key
+a node's declarative config names it needs: `tools.json`'s own `env[]`, plus
+any key its `mcpServers` reference (a stdio server's `env[]` names, or a
+`${KEY}` substituted into an http/sse header) — the same "declared" set the
+`env-missing`/`env-undeclared` lint checks above already treat as
+authoritative. Each entry is `{ nodePath, key }`, `nodePath` root-relative
+(`""` for the team root).
+
+```json
+[
+  { "nodePath": "", "key": "ANTHROPIC_API_KEY" },
+  { "nodePath": "growth/copywriter", "key": "BEACON_KEY" }
+]
+```
+
+It is surfaced three ways, all reading the same compiled snapshot: `ravel
+validate --json` and `GET /api/validate` (and `PUT /api/files`) each gain a
+`declaredEnv` field, and library consumers can call `declaredEnv(snapshot)`
+directly.
+
+Two things worth stating plainly, since a hosting platform's onboarding UI
+copy depends on them:
+
+1. **This is a best-effort hint, not a complete inventory.** A plugin tool
+   handler can read `process.env` directly without declaring it anywhere, so
+   an empty result doesn't mean a team needs no secrets — it means the config
+   declares none. Present it as "here's what we can tell you," not a
+   guarantee.
+2. **It does not see a plugin's own `env: string[]`** (the separate
+   declaration a `plugin.ts` makes via `definePlugin`, validated at `serve`
+   once the plugin is loaded — see `plugins/types.ts`). Answering that would
+   require importing team code, which `compileRegistry` deliberately never
+   does — the same reason `validate` runs cleanly in a checkout with no
+   `node_modules` installed. `declaredEnv` reports only the declarative
+   surface (`tools.json` + the `mcpServers` it names), so it works in exactly
+   the bare candidate worktree a deploy pipeline hands it, before `npm ci`.
+
 ## Worker API & logs (for hosting integrators)
 
 `GET /api/validate` and `PUT /api/files` return the **same shape** — compile
@@ -88,6 +127,9 @@ curl http://127.0.0.1:4317/api/validate
   "diagnostics": [
     { "where": "growth/copywriter/tools.json", "severity": "warning",
       "code": "memory-write", "message": "grants generic memory write \"mem_text_set\" — ..." }
+  ],
+  "declaredEnv": [
+    { "nodePath": "growth/copywriter", "key": "BEACON_KEY" }
   ]
 }
 ```
@@ -120,6 +162,8 @@ Observability reads (so you needn't reconstruct from the raw trail):
 | — | 0.1.x | Initial format: agent.md, tools.json, processes, plugin.ts. `ravel.json` present but unread. |
 | **0.2** | 0.2.x | `ravel.json` `runtimeVersion` now read + checked (warn). `tools.json` gains `env[]`. Advisory lint added (memory-write, env, unknown-tool warnings). All additive — 0.1 teams validate unchanged. |
 | **0.2** | 0.3.x | **No config-format change.** A team is now an npm package: `ravel create` scaffolds a `package.json` depending on `@runravel/ravel`, and the recommended workflow is `npm install` / `npm run dev`. The runtime still compiles the same declarative surface; `package.json` is not parsed by it. |
+| **0.2** | 0.4.x | **No config-format change.** Observability surface only (`GET /api/health`, `GET /api/audit`, run/agent metrics, tool input/output in the audit trail). |
+| **0.2** | 0.5.x | **No config-format change.** `declaredEnv` reports the existing `tools.json` `env[]`/`mcpServers` surface back to callers in a new shape (`ravel validate --json`, `GET /api/validate`, and a `declaredEnv(snapshot)` export) — no new field, file, or semantics in the declarative schema itself. |
 
 The **config version** (the declarative schema the runtime parses) is distinct from
 the **package version** — the format can stay stable across runtime releases, as 0.3.x
