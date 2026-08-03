@@ -3,7 +3,7 @@
 All notable changes to `@runravel/ravel`. The format follows
 [Keep a Changelog](https://keepachangelog.com); versions follow semver.
 
-## 0.6.0 — unreleased
+## 0.6.0 — 2026-08-02
 
 Budgets: a hosting platform can now read the caps a team's config declares, and set
 caps of its own that the runtime enforces — without the team committing anything to
