@@ -98,6 +98,60 @@ describe("Orchestrator (injected planner)", () => {
     expect(result.turns).toBe(2);
   });
 
+  it("resolveBudget overrides config's budget entirely — no merge (WO-008 / DEC-013)", async () => {
+    const engine = new FakeEngine(() => "work");
+    const { snapshot, lifecycle, audit } = await setup(engine);
+    // Config declares a generous budget; resolveBudget (standing in for a
+    // limits document) must override it completely, not merge with it.
+    const proc = {
+      ...snapshot.processes[0]!,
+      spec: { ...snapshot.processes[0]!.spec, budget: { turns: 100 } },
+    };
+    const planner: Planner = {
+      async plan(): Promise<Plan> {
+        return {
+          done: false,
+          tasks: [{ assigneeRole: "researcher", goal: "loop", definitionOfDone: "never" }],
+          usage: emptyUsage(),
+        };
+      },
+    };
+    const orch = new Orchestrator({
+      lifecycle,
+      planner,
+      audit,
+      resolveBudget: (_name, configBudget) => {
+        expect(configBudget).toEqual({ turns: 100 }); // still handed the config value, for context
+        return { turns: 1 }; // but the override wins outright
+      },
+    });
+    const result = await orch.runProcess(proc, snapshot);
+    expect(result.status).toBe("budget_exhausted");
+    expect(result.turns).toBe(1);
+  });
+
+  it("resolveBudget returning undefined falls back to config's budget, then the absolute default", async () => {
+    const engine = new FakeEngine(() => "work");
+    const { snapshot, lifecycle, audit } = await setup(engine);
+    const proc = {
+      ...snapshot.processes[0]!,
+      spec: { ...snapshot.processes[0]!.spec, budget: { turns: 2 } },
+    };
+    const planner: Planner = {
+      async plan(): Promise<Plan> {
+        return {
+          done: false,
+          tasks: [{ assigneeRole: "researcher", goal: "loop", definitionOfDone: "never" }],
+          usage: emptyUsage(),
+        };
+      },
+    };
+    const orch = new Orchestrator({ lifecycle, planner, audit, resolveBudget: () => undefined });
+    const result = await orch.runProcess(proc, snapshot);
+    expect(result.status).toBe("budget_exhausted");
+    expect(result.turns).toBe(2); // config's budget, since resolveBudget declined to govern
+  });
+
   it("attributes the planner's own usage to the owner node via process.turn (ask #14)", async () => {
     const engine = new FakeEngine(() => "did the research");
     const { snapshot, lifecycle, audit } = await setup(engine);

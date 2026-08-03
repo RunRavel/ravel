@@ -55,6 +55,15 @@ export interface OrchestratorDeps {
   /** Parent dir for per-run workspaces. When set, runs get a shared workspace. */
   workspaceRoot?: string;
   clock?: Clock;
+  /**
+   * Resolve the effective per-run Budget for a process, given its config
+   * `budget` (if any). Return `undefined` to fall back to
+   * `configBudget ?? { turns: ABSOLUTE_MAX_TURNS }` — today's behavior with
+   * no limits document. Injected so operator-set limits (WO-008/ask #23,
+   * `trust/limits.ts`) can govern without the orchestrator depending on
+   * `LimitsStore` directly.
+   */
+  resolveBudget?: (processName: string, configBudget: Budget | undefined) => Budget | undefined;
 }
 
 /**
@@ -101,7 +110,7 @@ export class Orchestrator {
   ): Promise<ProcessRunResult> {
     const runId = run.runId ?? newId("run");
     const processName = proc.spec.name;
-    const budget: Budget = proc.spec.budget ?? { turns: ABSOLUTE_MAX_TURNS };
+    const budget: Budget = this.deps.resolveBudget?.(processName, proc.spec.budget) ?? proc.spec.budget ?? { turns: ABSOLUTE_MAX_TURNS };
     const meter = new BudgetMeter(budget, this.clock);
     const results: TaskResult[] = [];
     let usage: Usage = emptyUsage();

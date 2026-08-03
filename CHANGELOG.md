@@ -3,6 +3,44 @@
 All notable changes to `@runravel/ravel`. The format follows
 [Keep a Changelog](https://keepachangelog.com); versions follow semver.
 
+## 0.6.0 — unreleased
+
+Budgets: a hosting platform can now read the caps a team's config declares, and set
+caps of its own that the runtime enforces — without the team committing anything to
+git. This is the runtime half of DEC-013 (ships asks #18 and #23; WO-008).
+
+### Added
+
+- **`GET /api/processes` now includes `budget`, `participants`, and `approvals`**
+  (ask #18) — previously only `{name, owner, definitionOfDone}`. A platform no
+  longer has to parse a process file's YAML frontmatter to display a declared cap.
+  Purely additive; no new declarative field.
+- **`GET/PUT/DELETE /api/limits`** (ask #23, `trust/limits.ts`) — an operator-set
+  spend-ceiling document, persisted at `.ravel/limits.json`. This is **team state,
+  like `scheduler.json`, never config** — writes stay enabled under
+  `--read-only-config`, the same reasoning as the scheduler.
+  - **Present ⇒ authoritative.** When the document exists it governs a process's
+    per-run budget completely; `ProcessSpec.budget` is ignored outright. **No
+    merge, ever** — one source is live at a time, per DEC-013. A required
+    `default` entry set means a document naming only some processes can never
+    silently uncap the rest.
+  - Two scopes per entry, both `{ scope, amountUsd, action }`: **per-run**
+    (`action` must be `"stop"` — rejected at validation if `"warn"`, since a
+    per-run cap is the orchestration loop's own termination condition and making
+    it advisory would reintroduce the unbounded run it exists to prevent) and
+    **rolling** (a raw duration in seconds — no calendar periods, which are a
+    platform concept; `action` may be `"stop"` or `"warn"`).
+  - A rolling `"stop"` blocks a launch **before the orchestrator starts** —
+    `App.runProcess` is the single chokepoint every launch path (CLI, direct API,
+    scheduler-triggered) funnels through, so this can't be bypassed. A rolling
+    `"warn"` is recorded as a `budget.warning` audit event but never blocks.
+  - **Restart safety, answered:** the in-memory per-run `BudgetMeter` does not
+    survive a worker restart, but this cannot be exploited — an interrupted run
+    does not resume (there is no continuation to reset). Rolling-window spend is
+    recomputed fresh from the durable audit ledger on every check, never from an
+    in-memory counter, so a worker recycling mid-window doesn't reset the window
+    either: the ledger IS the counter.
+
 ## 0.5.0 — 2026-08-02
 
 Onboarding: the runtime can now report which env keys a checkout declares it

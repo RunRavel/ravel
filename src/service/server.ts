@@ -95,6 +95,9 @@ export function createServer(deps: ServerDeps): http.Server {
         name: p.spec.name,
         owner: p.ownerNodeId,
         definitionOfDone: p.spec.definitionOfDone,
+        participants: p.spec.participants,
+        approvals: p.spec.approvals,
+        ...(p.spec.budget ? { budget: p.spec.budget } : {}),
       }));
       return sendJson(res, 200, { processes: procs });
     }
@@ -201,6 +204,26 @@ export function createServer(deps: ServerDeps): http.Server {
       if (!name) return sendJson(res, 400, { error: "name required" });
       await scheduler.removeProcess(name);
       return sendJson(res, 200, scheduler.snapshot());
+    }
+
+    // --- budget limits (operator-set spend ceilings; team state, not config) --
+    // Writes stay enabled under --read-only-config, same reason as the
+    // scheduler: this is operator-editable team state, never git-sourced.
+    if (m === "GET" && url.pathname === "/api/limits") {
+      return sendJson(res, 200, { document: app.limits.get() });
+    }
+    if (m === "PUT" && url.pathname === "/api/limits") {
+      const body = await readJson(req);
+      try {
+        const document = await app.limits.set(body);
+        return sendJson(res, 200, { document });
+      } catch (err) {
+        return sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+    if (m === "DELETE" && url.pathname === "/api/limits") {
+      await app.limits.clear();
+      return sendJson(res, 200, { document: null });
     }
     if (m === "POST" && seg[0] === "runs" && seg[1] && seg[2] === "dismiss") {
       runs.delete(seg[1]);

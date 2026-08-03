@@ -92,6 +92,13 @@ Team-provided code tools. A team root's `plugin.ts` default-exports
   sticky until cleared.
 - `observability.ts` — dashboard snapshot (usage, per-agent state, runs, proposals).
 - `budget.ts` / `domain/pricing.ts` — $ + turn metering per task/run.
+- `limits.ts` — `LimitsStore` (WO-008): the operator-set spend-ceiling document
+  (`.ravel/limits.json`), team state like `scheduler.json`. `perRunBudget(name)`
+  overrides `ProcessSpec.budget` outright when the document exists — no merge, one
+  source is ever live (DEC-013). `check(name)` is the pre-flight rolling-window gate
+  every launch passes through (`App.runProcess`), computed fresh from the durable
+  audit ledger every call — a worker restart can't reset a window because nothing is
+  cached in memory.
 
 ### `messaging/`
 - `bus.ts` — inter-agent message bus: routes structured messages along the org
@@ -102,7 +109,8 @@ Team-provided code tools. A team root's `plugin.ts` default-exports
 ### `service/`
 - `server.ts` — the local HTTP+SSE API: org, dashboard, processes/run, runs (+events,
   files, stop/dismiss), proposals, chat, generic memory tree (`/api/mem/*`), secrets
-  (names only), config authoring (`/api/files` + validate), scheduler CRUD. Non-`/api`
+  (names only), config authoring (`/api/files` + validate), scheduler CRUD, budget
+  limits CRUD (`/api/limits`, WO-008). Non-`/api`
   GETs serve the built operator console (`ui/dist`) when it exists — one port for API
   + console. UI development uses the Vite dev server (`cd ui && npm run dev`) instead.
 - **Worker contract** (what a hosting platform may rely on): the server only
@@ -131,12 +139,32 @@ Team-provided code tools. A team root's `plugin.ts` default-exports
   run can still contain recovered task failures); `AgentMetric` carries
   `tasksFailed`/`p50Ms`/`meanMs` and a `usage` that now includes the owner's own
   planning turns, not just dispatched tasks; and the trail records tool `input`
-  (`tool.started`) and `output` (`tool.finished`).
+  (`tool.started`) and `output` (`tool.finished`). `GET /api/processes` includes
+  `budget`/`participants`/`approvals` (ask #18) so a platform can read a process's
+  declared caps without parsing frontmatter.
 - `scheduler.ts` — per-process auto-run. Modes: **adaptive** (after each run, reads
   the orchestrator's `next_run_minutes` hint from team memory, clamped to operator
   `[min,max]`) and **cron** (standard 5-field, local time). Code-enforced rails:
   single-flight per process, interval clamp, optional rolling-24h USD ceiling
   (pauses, doesn't fail). Config: `.ravel/scheduler.json`.
+- **Budget limits** (`GET/PUT/DELETE /api/limits`, `trust/limits.ts`, WO-008):
+  operator-set spend ceilings, persisted at `.ravel/limits.json` — team state, not
+  config, so writes stay enabled under `--read-only-config` (same reasoning as the
+  scheduler). **Present ⇒ authoritative:** when the document exists it governs a
+  process's per-run budget completely; `ProcessSpec.budget` is ignored outright, with
+  no merge between the two (DEC-013) — the platform's UI, not the runtime, says which
+  source is live. A `default` entry is required so a document naming only some
+  processes can never silently uncap the rest. Two kinds of entry, both `{ scope,
+  amountUsd, action }`: **per-run** (`action` must be `"stop"` — a per-run cap is the
+  orchestration loop's own termination condition, and `"warn"` would make it
+  advisory) and **rolling** (a raw duration in seconds — no calendar periods, that's a
+  platform concept — `action` may be `"stop"` or `"warn"`, evaluated fresh from the
+  durable audit ledger on every launch, so a worker restart can never reset a window).
+  A rolling `"stop"` blocks the launch pre-flight (`App.runProcess`, before the
+  orchestrator starts — `status: "budget_exhausted"`, no tasks dispatched); a rolling
+  `"warn"` is recorded as a `budget.warning` audit event but never blocks. Per-run caps
+  are enforced the existing way, via `BudgetMeter` mid-run — `LimitsStore.perRunBudget`
+  just decides what `Budget` the meter is constructed with.
 
 ### `secrets/`
 Per-agent `.env` chains (org root → node; deepest wins), so a sibling agent can't

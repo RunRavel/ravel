@@ -16,10 +16,12 @@ import { ProposalStore } from "../trust/proposals.js";
 import { ActionExecutor } from "../trust/executor.js";
 import { KillSwitch } from "../trust/killswitch.js";
 import { Observer, type DashboardSnapshot } from "../trust/observability.js";
+import { LimitsStore } from "../trust/limits.js";
 import { OFFICE_TOOL_NAMES, runOfficeAction } from "../runtime/officeActions.js";
 import { PluginRegistry } from "../plugins/loader.js";
 import { SecretStore } from "../secrets/store.js";
-import type { PermissionDecision, ApprovalRequest, Proposal } from "../domain/types.js";
+import { newId } from "../domain/ids.js";
+import { emptyUsage, type PermissionDecision, type ApprovalRequest, type Proposal } from "../domain/types.js";
 
 export interface AppOptions {
   /** Org root folder (must contain the top-level agent.md). */
@@ -60,6 +62,8 @@ export class App {
   readonly memory: MemoryStore;
   readonly orchestrator: Orchestrator;
   readonly observer: Observer;
+  /** Operator-set spend ceilings (WO-008) — team state; absent means config's `ProcessSpec.budget` governs. */
+  readonly limits: LimitsStore;
   /** Loaded team plugins (in-process code tools scoped per team). */
   readonly plugins: PluginRegistry;
   /** Per-node credential resolver (each agent's `.env` chain). */
@@ -110,11 +114,13 @@ export class App {
       plugins: this.plugins,
       secrets: this.secrets,
     });
+    this.limits = new LimitsStore({ configPath: path.join(runtimeDir, "limits.json"), events: this.audit });
     this.orchestrator = new Orchestrator({
       lifecycle: this.lifecycle,
       planner: new EnginePlanner((id) => this.lifecycle.get(id)),
       audit: this.audit,
       workspaceRoot: path.join(runtimeDir, "runs"),
+      resolveBudget: (name, configBudget) => this.limits.perRunBudget(name) ?? configBudget,
     });
     this.observer = new Observer(this.audit, this.lifecycle, this.proposals, () => this.bus.deadLetters.length);
 
@@ -156,6 +162,7 @@ export class App {
     // Rehydrate durable state so runs, chats, proposals, and spend survive restarts.
     await this.audit.load?.();
     await this.proposals.load();
+    await this.limits.load();
     if (migrated) {
       await this.audit.append("state.migrated", { data: { from: ".businessos", to: ".ravel" } });
     }
@@ -258,6 +265,26 @@ export class App {
     if (!proc) {
       const available = this.snapshot.processes.map((p) => p.spec.name).join(", ") || "(none)";
       throw new Error(`no process named "${name}". Available: ${available}`);
+    }
+    // Pre-flight rolling-window gate — evaluated fresh from the durable ledger
+    // on every launch (CLI, direct API, or scheduler-triggered all funnel
+    // through here), so this can never be bypassed by a worker restart.
+    const gate = this.limits.check(name);
+    for (const reason of gate.warnings) {
+      await this.audit.append("budget.warning", { nodeId: proc.ownerNodeId, data: { process: name, reason } });
+    }
+    if (gate.blocked) {
+      const runId = run.runId ?? newId("run");
+      await this.audit.append("process.blocked", { runId, nodeId: proc.ownerNodeId, data: { process: name, reason: gate.reason } });
+      return {
+        runId,
+        processName: name,
+        status: "budget_exhausted",
+        summary: `Blocked before starting: ${gate.reason}`,
+        results: [],
+        usage: emptyUsage(),
+        turns: 0,
+      };
     }
     return this.orchestrator.runProcess(proc, this.snapshot, run);
   }

@@ -159,6 +159,17 @@ Observability reads (so you needn't reconstruct from the raw trail):
   previously the planner's cost (often the majority of a run's spend) was
   attributed to no agent and excluded from the team-wide total. `tasksRun` is
   unaffected — a planning turn is not a dispatched task.
+- `GET /api/processes` includes `budget`, `participants`, and `approvals` for each
+  process (ask #18) — the platform no longer has to parse a process file's YAML
+  frontmatter to display a declared cap.
+- `GET/PUT/DELETE /api/limits` — an operator-set spend-ceiling document (ask #23),
+  persisted at `.ravel/limits.json`. This is **team state, like `scheduler.json`,
+  not declarative config** — it doesn't touch `agent.md`/`tools.json`/`ravel.json`
+  and isn't part of the config-format version history below. When set, it governs a
+  process's per-run budget completely (`ProcessSpec.budget` is ignored outright, no
+  merge — DEC-013) and gates every launch against its rolling-window entries before
+  the orchestrator starts. See [architecture.md](./architecture.md#service) for the
+  full shape and semantics.
 
 ## Version history
 
@@ -169,6 +180,7 @@ Observability reads (so you needn't reconstruct from the raw trail):
 | **0.2** | 0.3.x | **No config-format change.** A team is now an npm package: `ravel create` scaffolds a `package.json` depending on `@runravel/ravel`, and the recommended workflow is `npm install` / `npm run dev`. The runtime still compiles the same declarative surface; `package.json` is not parsed by it. |
 | **0.2** | 0.4.x | **No config-format change.** Observability surface only (`GET /api/health`, `GET /api/audit`, run/agent metrics, tool input/output in the audit trail). |
 | **0.2** | 0.5.x | **No config-format change.** `declaredEnv` reports the existing `tools.json` `env[]`/`mcpServers` surface back to callers in a new shape (`ravel validate --json`, `GET /api/validate`, and a `declaredEnv(snapshot)` export) — no new field, file, or semantics in the declarative schema itself. |
+| **0.2** | 0.6.x | **No config-format change.** `GET /api/processes` now serializes existing `ProcessSpec` fields (`budget`/`participants`/`approvals`) it previously withheld. The new `.ravel/limits.json` (`GET/PUT/DELETE /api/limits`) is operator-set team state, not declarative config — same category as `scheduler.json`, which also isn't tracked here. |
 
 The **config version** (the declarative schema the runtime parses) is distinct from
 the **package version** — the format can stay stable across runtime releases, as 0.3.x
