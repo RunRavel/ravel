@@ -267,7 +267,12 @@ export class Orchestrator {
   ): Promise<ProcessRunResult> {
     await this.deps.audit.append("process.finished", {
       runId,
-      data: { process: processName, status, turns, usage },
+      // The process's own final summary (what the owner concluded the run
+      // achieved) was never recorded here — only in the in-memory
+      // ProcessRunResult, gone on restart. Same defect as task.finished's
+      // summary, one level up (WO-021/ask #25 part 3). Same cap for the same
+      // reason: bounded, but generous enough for a real final answer.
+      data: { process: processName, status, turns, usage, summary: summary.slice(0, 8000) },
     });
     return {
       runId,

@@ -3,6 +3,59 @@
 All notable changes to `@runravel/ravel`. The format follows
 [Keep a Changelog](https://keepachangelog.com); versions follow semver.
 
+## 0.7.0 — unreleased
+
+Run transcripts: an operator can now read what an agent actually said, not a
+2000-character fragment of its last turn (WO-021, ask #25 — designed by the
+WO-020 spike).
+
+### Added
+
+- **`GET /api/runs/:id/transcript`** (`runtime/transcript.ts`) — the opt-in
+  per-run record of every turn's agent-authored text, not just a task's final
+  turn. `sdkEngine.ts` now captures `text` content blocks from **every**
+  assistant message, not only the last — previously, intermediate-turn text
+  across up to 45 internal turns (`WORKER_MAX_TURNS`) was never read into any
+  variable at all. Not a truncation bug: nothing to raise a cap on, it simply
+  wasn't captured.
+  - **Opt-in, off by default**: `AppOptions.captureTranscripts` /
+    `--capture-transcripts` on `ravel run`/`ravel serve`. With it off, no
+    transcript file is ever created and behavior is unchanged — an OSS laptop
+    user and a hosted tenant have different disk appetites, and the runtime
+    exposes the toggle without knowing which is which.
+  - **Deliberately not part of `audit.jsonl`.** That file is read wholesale
+    into memory on every worker boot (`JsonlAudit.load()`), linearly scanned
+    on every dashboard poll, launch, and scheduler tick (`Observer`,
+    `LimitsStore`, `Scheduler`), and teed live over SSE to every connected
+    console (`EmittingAudit`). Persisted instead at
+    `.ravel/runs/<runId>/transcript.jsonl` — a separate artifact nobody reads
+    unless asked.
+  - **Extended thinking is explicitly out of scope.** The SDK exposes
+    reasoning as a distinct content-block type, but the runtime never
+    requests it (`maxThinkingTokens` is unset) — nothing is lost today by not
+    capturing it. Enabling it has a real per-run token cost and is a separate
+    product decision; the transcript's entry shape (`{ type: "text", text }`)
+    is deliberately left open for a future `"thinking"` variant so that
+    decision, whenever it's made, doesn't require a format change.
+  - **Sizing, sanity-checked** (no live API key was available for this
+    check; driven through the real `TranscriptStore`/`JsonlAudit` code with a
+    synthetic but representative multi-turn task — 15 turns of interim
+    commentary plus several tool calls): `audit.jsonl` size is **unchanged**
+    with capture on (0-byte delta, confirmed) — the transcript is a fully
+    separate cost. The transcript itself added roughly **0.4×–3× the size of
+    that same run's `audit.jsonl`**, depending on how tool-call-heavy versus
+    prose-heavy the task was (tool outputs already dominate `audit.jsonl`;
+    interim prose is what's newly captured). Order-of-magnitude, not a
+    benchmark — plan retention accordingly.
+- **`task.finished.summary`'s cap raised 2000 → ~8000 characters**
+  (`agent.ts`). Cheap, and not the actual fix on its own — it only ever
+  helped the final turn — but catches the common "my final answer got cut
+  off" case immediately.
+- **`process.finished` now records the process's own final summary**
+  (`orchestrator.ts`) — previously held only in the in-memory
+  `ProcessRunResult`, lost on a restart. Same defect as the task-level cap,
+  one level up; found in passing by the WO-020 spike and fixed alongside.
+
 ## 0.6.0 — 2026-08-02
 
 Budgets: a hosting platform can now read the caps a team's config declares, and set

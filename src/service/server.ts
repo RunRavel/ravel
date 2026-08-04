@@ -173,6 +173,13 @@ export function createServer(deps: ServerDeps): http.Server {
       const list = events.all().filter((e) => e.runId === runId);
       return sendJson(res, 200, { events: list });
     }
+    // Opt-in run transcript (WO-021/ask #25) — every turn's text, not just the
+    // final one. `[]` when capture is off (`app.transcripts` undefined) or the
+    // run wrote nothing; never a 404 — a missing transcript degrades cleanly.
+    if (m === "GET" && seg[0] === "runs" && seg[1] && seg[2] === "transcript") {
+      const entries = (await app.transcripts?.read(seg[1])) ?? [];
+      return sendJson(res, 200, { transcript: entries });
+    }
     if (m === "GET" && url.pathname === "/api/runs") {
       return sendJson(res, 200, { runs: listRuns() });
     }

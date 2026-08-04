@@ -17,6 +17,7 @@ import { ActionExecutor } from "../trust/executor.js";
 import { KillSwitch } from "../trust/killswitch.js";
 import { Observer, type DashboardSnapshot } from "../trust/observability.js";
 import { LimitsStore } from "../trust/limits.js";
+import { TranscriptStore } from "../runtime/transcript.js";
 import { OFFICE_TOOL_NAMES, runOfficeAction } from "../runtime/officeActions.js";
 import { PluginRegistry } from "../plugins/loader.js";
 import { SecretStore } from "../secrets/store.js";
@@ -42,6 +43,16 @@ export interface AppOptions {
   persistMessages?: boolean;
   /** Approval mode: "deferred" (default — async proposals) or "sync" (blocking, interactive). */
   approvals?: ApprovalMode;
+  /**
+   * Capture every turn's agent-authored text per run — not just the final
+   * turn's ~8000-character summary — to `.ravel/runs/<runId>/transcript.jsonl`,
+   * readable over `GET /api/runs/:id/transcript` (WO-021/ask #25). Off by
+   * default: an OSS user on a laptop and a hosted tenant have different disk
+   * appetites, and the runtime exposes the toggle without knowing which is
+   * which. With this off, no transcript file is ever created and nothing
+   * behaves differently.
+   */
+  captureTranscripts?: boolean;
   watchOptions?: Partial<ChokidarOptions>;
 }
 
@@ -64,6 +75,8 @@ export class App {
   readonly observer: Observer;
   /** Operator-set spend ceilings (WO-008) — team state; absent means config's `ProcessSpec.budget` governs. */
   readonly limits: LimitsStore;
+  /** Opt-in per-run transcript sink (WO-021/ask #25) — undefined when `captureTranscripts` wasn't set; no transcript is ever written or readable. */
+  readonly transcripts?: TranscriptStore;
   /** Loaded team plugins (in-process code tools scoped per team). */
   readonly plugins: PluginRegistry;
   /** Per-node credential resolver (each agent's `.env` chain). */
@@ -104,6 +117,7 @@ export class App {
     this.memory = new MemoryStore(path.join(runtimeDir, "memory"));
     this.plugins = new PluginRegistry(this.root, this.audit);
     this.secrets = new SecretStore(this.root);
+    this.transcripts = opts.captureTranscripts ? new TranscriptStore(path.join(runtimeDir, "runs")) : undefined;
     this.lifecycle = new Lifecycle({
       engine: opts.engine,
       audit: this.audit,
@@ -113,6 +127,7 @@ export class App {
       memory: this.memory,
       plugins: this.plugins,
       secrets: this.secrets,
+      ...(this.transcripts ? { transcripts: this.transcripts } : {}),
     });
     this.limits = new LimitsStore({ configPath: path.join(runtimeDir, "limits.json"), events: this.audit });
     this.orchestrator = new Orchestrator({

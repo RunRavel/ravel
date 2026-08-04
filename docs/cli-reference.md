@@ -7,12 +7,12 @@ before any command needs `ANTHROPIC_API_KEY` (existing exported env wins).
 ```
 ravel create <name>
 ravel validate [--dir <org>]
-ravel run <process-name> [--dir <org>] [--dry-run] [--sync] [--input k=v]... [--file <path>]...
+ravel run <process-name> [--dir <org>] [--dry-run] [--sync] [--capture-transcripts] [--input k=v]... [--file <path>]...
 ravel chat <node-id> <message...> [--dir <org>]
 ravel proposals [list|approve <id>|reject <id>] [--dir <org>]
 ravel dashboard [--dir <org>]
 ravel watch [--dir <org>]
-ravel serve [--dir <org>] [--port 4317] [--host 127.0.0.1] [--state-dir <path>] [--read-only-config]
+ravel serve [--dir <org>] [--port 4317] [--host 127.0.0.1] [--state-dir <path>] [--read-only-config] [--capture-transcripts]
 ```
 
 ## `ravel create <name>`
@@ -58,6 +58,11 @@ loop — good for scripting and CI.
   prompt right there in the terminal instead of queuing as a Proposal. Good
   for a single supervised run; `serve`'s default (deferred/async) is better
   for anything long-running or unattended.
+- `--capture-transcripts` — record every turn's agent-authored text for this
+  run (not just a task's final ~8000-char summary) to
+  `<state-dir>/runs/<runId>/transcript.jsonl`, readable over `GET
+  /api/runs/:id/transcript` when running under `serve`. Off by default — see
+  [architecture.md](./architecture.md#service).
 
 ```bash
 ravel run "Resolve Ticket Batch" --dir examples/harbor \
@@ -109,6 +114,11 @@ The long-running mode: HTTP + SSE API and the operator console on one port.
   /api/scheduler` stays enabled — scheduler config is team state, not
   authoring config. For workers whose config comes from a git checkout, not
   live edits.
+- `--capture-transcripts` — record every turn's agent-authored text per run to
+  `<state-dir>/runs/<runId>/transcript.jsonl`, readable over `GET
+  /api/runs/:id/transcript`. Off by default (see
+  [architecture.md](./architecture.md#service)); this can add meaningfully to
+  disk use on a long-running worker.
 
 Shuts down gracefully on both `SIGINT` (Ctrl-C) and `SIGTERM` (what container
 runtimes send on stop).

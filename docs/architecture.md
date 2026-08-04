@@ -57,6 +57,13 @@ the watcher uses — plugin load + action registration are settled before it ret
   switch, live `activity`, task lifecycle events, plugin resolution
   (`plugins.forNode`, env resolution from the node's `.env` chain).
 - `officeTools.ts` / `officeActions.ts` — built-in file/workspace tools.
+- `transcript.ts` — `TranscriptStore` (WO-021/ask #25): the opt-in per-run record of
+  every turn's agent-authored text, not just a task's final ~8000-char summary.
+  Persisted at `.ravel/runs/<runId>/transcript.jsonl`, never `audit.jsonl` — see
+  `service/` below for why. `sdkEngine.ts` captures `text` content blocks from
+  every assistant message (not only the last) when `EngineRequest.captureTranscript`
+  is set; `agent.ts` writes them, attributed by `nodeId` and (for a dispatched
+  task) `contractId`, only when `AppOptions.captureTranscripts` is on.
 
 ### `orchestrator/`
 - `planner.ts` — the owner's planning prompt → `PlannedTask[]` (assignee role, goal,
@@ -165,6 +172,21 @@ Team-provided code tools. A team root's `plugin.ts` default-exports
   `"warn"` is recorded as a `budget.warning` audit event but never blocks. Per-run caps
   are enforced the existing way, via `BudgetMeter` mid-run — `LimitsStore.perRunBudget`
   just decides what `Budget` the meter is constructed with.
+- **Run transcripts** (`GET /api/runs/:id/transcript`, `runtime/transcript.ts`,
+  WO-021/ask #25): the opt-in full record of what an agent actually said, not just a
+  task's final ~8000-char summary. **Off by default** (`AppOptions.captureTranscripts`,
+  `--capture-transcripts` on `run`/`serve`) — an OSS laptop user and a hosted tenant
+  have different disk appetites; the runtime exposes the toggle, never a notion of who
+  is paying. With it off, no transcript file is ever created and `GET
+  .../transcript` returns `{ transcript: [] }`; a run whose transcript is missing or
+  unreadable degrades the same way — never a 404, never a broken run. Deliberately
+  **not** part of `audit.jsonl`: that file is read wholesale into memory on every
+  worker boot (`JsonlAudit.load()`), linearly scanned on every dashboard poll, launch,
+  and scheduler tick (`Observer`, `LimitsStore`, `Scheduler`), and teed live over SSE
+  to every connected console (`EmittingAudit`) — a separate artifact nobody reads by
+  default carries none of that cost. `process.finished` now also records the
+  process's own final summary (previously only held in the in-memory
+  `ProcessRunResult`, lost on restart) — same defect one level up, fixed alongside.
 
 ### `secrets/`
 Per-agent `.env` chains (org root → node; deepest wins), so a sibling agent can't

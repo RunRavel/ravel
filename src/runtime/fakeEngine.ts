@@ -1,4 +1,4 @@
-import type { AgentEngine, EngineRequest, EngineResult, EngineToolUse } from "./engine.js";
+import type { AgentEngine, EngineRequest, EngineResult, EngineToolUse, EngineTranscriptEntry } from "./engine.js";
 import { emptyUsage, addUsage, type Usage, type PermissionDecision } from "../domain/types.js";
 
 /** Context a scripted program uses to simulate an agent's behavior. */
@@ -12,6 +12,13 @@ export interface FakeContext {
   useTool: (name: string, input: unknown, rationale?: string, output?: unknown) => Promise<PermissionDecision>;
   /** Report simulated token usage (also forwarded to the runtime's budget meter). */
   emitUsage: (u: Usage) => void;
+  /**
+   * Simulate an intermediate turn's text reaching the transcript (WO-021/ask
+   * #25) — mirroring what `SdkEngine` captures from non-final assistant
+   * messages when `req.captureTranscript` is set. A no-op if capture wasn't
+   * requested, matching `SdkEngine`'s own behavior.
+   */
+  emitTranscriptText: (text: string) => void;
   /** Resolves true once the run has been aborted (kill / budget / timeout). */
   aborted: () => boolean;
 }
@@ -43,6 +50,7 @@ export class FakeEngine implements AgentEngine {
     const program = this.queue.shift() ?? this.defaultProgram;
     let usage = emptyUsage();
     const toolUses: EngineToolUse[] = [];
+    const transcript: EngineTranscriptEntry[] = [];
 
     const ctx: FakeContext = {
       req,
@@ -54,18 +62,21 @@ export class FakeEngine implements AgentEngine {
         usage = addUsage(usage, u);
         req.onUsage?.(u);
       },
+      emitTranscriptText: (text) => {
+        if (req.captureTranscript) transcript.push({ type: "text", text });
+      },
       aborted: () => req.signal.aborted,
     };
 
     try {
       const text = await program(ctx);
       if (req.signal.aborted) {
-        return { text, usage, stopReason: "aborted", toolUses };
+        return { text, usage, stopReason: "aborted", toolUses, ...(transcript.length ? { transcript } : {}) };
       }
-      return { text, usage, stopReason: "done", toolUses };
+      return { text, usage, stopReason: "done", toolUses, ...(transcript.length ? { transcript } : {}) };
     } catch (err) {
       if (req.signal.aborted) {
-        return { text: "", usage, stopReason: "aborted", toolUses };
+        return { text: "", usage, stopReason: "aborted", toolUses, ...(transcript.length ? { transcript } : {}) };
       }
       return {
         text: "",
@@ -73,6 +84,7 @@ export class FakeEngine implements AgentEngine {
         stopReason: "error",
         toolUses,
         error: err instanceof Error ? err.message : String(err),
+        ...(transcript.length ? { transcript } : {}),
       };
     }
   }

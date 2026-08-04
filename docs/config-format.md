@@ -170,6 +170,13 @@ Observability reads (so you needn't reconstruct from the raw trail):
   merge — DEC-013) and gates every launch against its rolling-window entries before
   the orchestrator starts. See [architecture.md](./architecture.md#service) for the
   full shape and semantics.
+- `GET /api/runs/:id/transcript` — the opt-in per-run record of every turn's
+  agent-authored text (ask #25), not just a task's final ~8000-character summary.
+  **Team state, like `scheduler.json`/`limits.json`, not declarative config** — the
+  flag that turns it on (`AppOptions.captureTranscripts` / `--capture-transcripts`)
+  is a runtime-embedding option, not something authored in a team's checkout. Off by
+  default; with it on, written to `.ravel/runs/<runId>/transcript.jsonl`, never
+  `audit.jsonl`. See [architecture.md](./architecture.md#service) for why.
 
 ## Version history
 
@@ -181,6 +188,7 @@ Observability reads (so you needn't reconstruct from the raw trail):
 | **0.2** | 0.4.x | **No config-format change.** Observability surface only (`GET /api/health`, `GET /api/audit`, run/agent metrics, tool input/output in the audit trail). |
 | **0.2** | 0.5.x | **No config-format change.** `declaredEnv` reports the existing `tools.json` `env[]`/`mcpServers` surface back to callers in a new shape (`ravel validate --json`, `GET /api/validate`, and a `declaredEnv(snapshot)` export) — no new field, file, or semantics in the declarative schema itself. |
 | **0.2** | 0.6.x | **No config-format change.** `GET /api/processes` now serializes existing `ProcessSpec` fields (`budget`/`participants`/`approvals`) it previously withheld. The new `.ravel/limits.json` (`GET/PUT/DELETE /api/limits`) is operator-set team state, not declarative config — same category as `scheduler.json`, which also isn't tracked here. |
+| **0.2** | 0.7.x | **No config-format change.** The opt-in `.ravel/runs/<runId>/transcript.jsonl` (`GET /api/runs/:id/transcript`) and its `captureTranscripts` toggle are runtime-embedding options and run state — nothing in `agent.md`/`tools.json`/`ravel.json`/`processes/*.process.md` changes. `task.finished.summary`'s cap moved 2000 → 8000 chars, and `process.finished` now also carries the run's own final summary — both existing event *shapes*, not new declarative fields. |
 
 The **config version** (the declarative schema the runtime parses) is distinct from
 the **package version** — the format can stay stable across runtime releases, as 0.3.x

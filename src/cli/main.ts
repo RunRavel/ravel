@@ -22,12 +22,12 @@ const HELP = `Ravel — run an agentic team defined as a folder tree.
 Usage:
   ravel create <name>
   ravel validate [--dir <org>]
-  ravel run <process-name> [--dir <org>] [--dry-run] [--sync] [--input k=v]... [--file <path>]...
+  ravel run <process-name> [--dir <org>] [--dry-run] [--sync] [--capture-transcripts] [--input k=v]... [--file <path>]...
   ravel chat <node-id> <message...> [--dir <org>]
   ravel proposals [list|approve <id>|reject <id>] [--dir <org>]
   ravel dashboard [--dir <org>]
   ravel watch [--dir <org>]
-  ravel serve [--dir <org>] [--port 4317] [--host 127.0.0.1] [--state-dir <path>] [--read-only-config]
+  ravel serve [--dir <org>] [--port 4317] [--host 127.0.0.1] [--state-dir <path>] [--read-only-config] [--capture-transcripts]
 
 Options:
   --dir <path>        Org root folder (default: current directory)
@@ -37,6 +37,11 @@ Options:
                       (default: <org>/.ravel)
   --read-only-config  Disable config/secret writes over HTTP (PUT /api/files,
                       PUT /api/secrets) — for workers whose config comes from git
+  --capture-transcripts  Record every turn's agent-authored text per run (not just
+                      the final turn's ~8000-char summary) to
+                      <state-dir>/runs/<runId>/transcript.jsonl, readable over
+                      GET /api/runs/:id/transcript. Off by default — this can add
+                      meaningfully to disk use on a long-running worker
   --dry-run           Agents produce intended actions but execute no tools
   --sync              Block on consequential actions with an interactive y/N prompt
                       (default is async: actions queue as proposals to approve later)
@@ -159,7 +164,7 @@ async function runServe(
   root: string,
   port: number,
   verbose: boolean,
-  opts: { stateDir?: string; readOnlyConfig?: boolean; host?: string; logFormat?: LogFormat } = {},
+  opts: { stateDir?: string; readOnlyConfig?: boolean; host?: string; logFormat?: LogFormat; captureTranscripts?: boolean } = {},
 ): Promise<number> {
   // A single run's abort (budget/turn cap, kill switch, or the Agent SDK's own
   // detached internals) must never take the whole long-running service down. The
@@ -192,6 +197,7 @@ async function runServe(
     engine: new SdkEngine(),
     audit: events,
     runtimeDir,
+    ...(opts.captureTranscripts ? { captureTranscripts: true } : {}),
     ...(verbose
       ? { verbose: (line: string) => process.stderr.write(`${line}\n`), logFormat: opts.logFormat ?? "pretty" }
       : {}),
@@ -253,6 +259,7 @@ async function main(): Promise<number> {
       host: { type: "string" },
       "state-dir": { type: "string" },
       "read-only-config": { type: "boolean" },
+      "capture-transcripts": { type: "boolean" },
       json: { type: "boolean" },
       help: { type: "boolean", short: "h" },
     },
@@ -333,6 +340,7 @@ async function main(): Promise<number> {
       ...(values.host ? { host: values.host } : {}),
       ...(values["state-dir"] ? { stateDir: values["state-dir"] } : {}),
       ...(values["read-only-config"] ? { readOnlyConfig: true } : {}),
+      ...(values["capture-transcripts"] ? { captureTranscripts: true } : {}),
       logFormat: logging.logFormat,
     });
   }
@@ -343,6 +351,7 @@ async function main(): Promise<number> {
     ...(values["state-dir"] ? { runtimeDir: path.resolve(values["state-dir"]) } : {}),
     ...(values["dry-run"] ? { dryRun: true } : {}),
     ...(values.sync ? { approvals: "sync" as const } : {}),
+    ...(values["capture-transcripts"] ? { captureTranscripts: true } : {}),
     ...(logging.verbose
       ? { verbose: (line: string) => process.stderr.write(`${line}\n`), logFormat: logging.logFormat }
       : {}),

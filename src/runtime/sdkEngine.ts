@@ -1,6 +1,6 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { Options, McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEngine, EngineRequest, EngineResult, EngineToolUse } from "./engine.js";
+import type { AgentEngine, EngineRequest, EngineResult, EngineToolUse, EngineTranscriptEntry } from "./engine.js";
 import { emptyUsage, type Usage } from "../domain/types.js";
 import { usageFor } from "../domain/pricing.js";
 import type { McpServerSpec, ToolsConfig } from "../schemas/tools.js";
@@ -185,14 +185,23 @@ export class SdkEngine implements AgentEngine {
     let usage: Usage = emptyUsage();
     let stopReason: EngineResult["stopReason"] = "done";
     let error: string | undefined;
+    // Every turn's text, in order — captured only when asked (WO-021/ask #25).
+    // Without this, only the LAST turn's text ever reached the runtime at all:
+    // intermediate assistant prose was never read into any variable, not
+    // truncated — this is the gap WO-020 found, not a cap to raise.
+    const transcript: EngineTranscriptEntry[] = [];
 
     try {
       for await (const message of query({ prompt: req.prompt, options })) {
         if (message.type === "assistant") {
-          // Record each tool_use block (id → name/input) as the model emits it.
+          // Record each tool_use block (id → name/input) as the model emits it,
+          // and — when requested — every text block, so the transcript captures
+          // the turn's prose too, not just its tool calls.
           for (const block of contentBlocks(message.message.content)) {
             if (block.type === "tool_use" && typeof block.id === "string") {
               toolsById.set(block.id, { name: String(block.name ?? ""), input: block.input });
+            } else if (req.captureTranscript && block.type === "text" && typeof block.text === "string" && block.text.length > 0) {
+              transcript.push({ type: "text", text: block.text });
             }
           }
           // Report this turn's usage (cache-aware) so the runtime can enforce
@@ -237,7 +246,7 @@ export class SdkEngine implements AgentEngine {
     } catch (err) {
       const toolUses = [...toolsById.values()];
       if (abortController.signal.aborted) {
-        return { text: finalText, usage, stopReason: "aborted", toolUses };
+        return { text: finalText, usage, stopReason: "aborted", toolUses, ...(transcript.length ? { transcript } : {}) };
       }
       return {
         text: "",
@@ -245,10 +254,18 @@ export class SdkEngine implements AgentEngine {
         stopReason: "error",
         toolUses,
         error: err instanceof Error ? err.message : String(err),
+        ...(transcript.length ? { transcript } : {}),
       };
     }
 
     if (abortController.signal.aborted) stopReason = "aborted";
-    return { text: finalText, usage, stopReason, toolUses: [...toolsById.values()], ...(error ? { error } : {}) };
+    return {
+      text: finalText,
+      usage,
+      stopReason,
+      toolUses: [...toolsById.values()],
+      ...(error ? { error } : {}),
+      ...(transcript.length ? { transcript } : {}),
+    };
   }
 }

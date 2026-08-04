@@ -68,6 +68,24 @@ export interface EngineRequest {
   decide: (use: EngineToolUse & { rationale?: string }) => Promise<PermissionDecision>;
   /** Reports incremental usage so the runtime can enforce budgets live. */
   onUsage?: (u: Usage) => void;
+  /**
+   * Capture every turn's agent-authored text, not just the final one, for the
+   * opt-in run transcript (WO-021/ask #25) — off by default. An engine that
+   * can't distinguish turns may ignore this and return no `transcript`.
+   */
+  captureTranscript?: boolean;
+}
+
+/**
+ * One piece of agent-authored prose observed mid-call — a turn's text block,
+ * captured only when `captureTranscript` was requested. `type` is `"text"`
+ * today; a future `"thinking"` (extended-thinking blocks) can be added
+ * without a shape change — deliberately left open per WO-020, though turning
+ * on extended thinking itself is a separate, out-of-scope decision.
+ */
+export interface EngineTranscriptEntry {
+  type: "text";
+  text: string;
 }
 
 export interface EngineResult {
@@ -77,6 +95,12 @@ export interface EngineResult {
   /** Tool calls the model attempted (whether allowed or denied). */
   toolUses: EngineToolUse[];
   error?: string;
+  /**
+   * Every turn's text, in order, when `captureTranscript` was set — including
+   * the final turn (the transcript is the whole story; `text` above stays the
+   * quick-glance final answer). Empty/absent when not requested.
+   */
+  transcript?: EngineTranscriptEntry[];
 }
 
 /**

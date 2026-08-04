@@ -14,6 +14,7 @@ import type { AuditSink } from "../trust/audit.js";
 import { systemClock, type Clock } from "../domain/ids.js";
 import { emptyUsage, type TaskContract, type TaskResult, type TaskStatus, type Usage } from "../domain/types.js";
 import type { AgentEngine, EngineRequest } from "./engine.js";
+import type { TranscriptStore } from "./transcript.js";
 
 export type AgentState = "idle" | "running" | "draining" | "killed";
 
@@ -94,6 +95,8 @@ export interface AgentRuntimeDeps {
   plugins?: PluginRegistry;
   /** Per-node credential resolver; an agent gets only its own `.env` chain (optional in tests). */
   secrets?: SecretStore;
+  /** Opt-in per-run transcript sink (WO-021/ask #25) — absent means capture is off (`AppOptions.captureTranscripts` false). */
+  transcripts?: TranscriptStore;
   clock?: Clock;
 }
 
@@ -262,6 +265,7 @@ export class AgentRuntime {
       builtinTools: builtinToolsFor(this.node.tools, true),
       maxTurns: WORKER_MAX_TURNS,
       cwd,
+      contractId: contract.id,
     });
     const result: TaskResult = {
       contractId: contract.id,
@@ -282,7 +286,10 @@ export class AgentRuntime {
         contractId: contract.id,
         status: result.status,
         usage: result.usage,
-        summary: result.summary.slice(0, 2000),
+        // 2000 → 8000 (WO-021/ask #25 part 3): catches the common "my final
+        // answer got cut off" case cheaply. Not the actual fix — this only
+        // ever helps the LAST turn; see `transcripts` for every turn's text.
+        summary: result.summary.slice(0, 8000),
       },
     });
     return result;
@@ -329,7 +336,7 @@ export class AgentRuntime {
     prompt: string,
     budget: Budget,
     runId: string | undefined,
-    call: { builtinTools: string[]; maxTurns: number; cwd: string },
+    call: { builtinTools: string[]; maxTurns: number; cwd: string; contractId?: string },
   ): Promise<EngineOutcome> {
     this.state = "running";
     const meter = new BudgetMeter(budget, this.clock);
@@ -372,6 +379,10 @@ export class AgentRuntime {
           }
         : {}),
       signal: controller.signal,
+      // Only ask the engine to bother collecting per-turn text when there's
+      // somewhere durable to put it — a run to key the transcript file by,
+      // and capture actually enabled (`AppOptions.captureTranscripts`).
+      captureTranscript: Boolean(this.deps.transcripts) && runId !== undefined,
       decide: async (use) => {
         if (meter.exceeded()) return "deny";
         // Surface the in-flight tool to the live console before we gate it.
@@ -415,6 +426,20 @@ export class AgentRuntime {
           ...(runId !== undefined ? { runId } : {}),
           data: { tool: t.name, input: t.input, ...(t.output !== undefined ? { output: t.output } : {}) },
         });
+      }
+      // Opt-in run transcript (WO-021/ask #25): every turn's text, not just
+      // the final one — written to `.ravel/runs/<runId>/`, never audit.jsonl.
+      if (this.deps.transcripts && runId !== undefined && engineResult.transcript?.length) {
+        await this.deps.transcripts.append(
+          runId,
+          engineResult.transcript.map((t) => ({
+            at: this.clock.iso(),
+            nodeId: this.node.id,
+            ...(call.contractId !== undefined ? { contractId: call.contractId } : {}),
+            type: t.type,
+            text: t.text,
+          })),
+        );
       }
       return {
         text: engineResult.text,
