@@ -3,7 +3,7 @@
 All notable changes to `@runravel/ravel`. The format follows
 [Keep a Changelog](https://keepachangelog.com); versions follow semver.
 
-## 0.7.0 — unreleased
+## 0.7.0 — 2026-08-05
 
 Run transcripts: an operator can now read what an agent actually said, not a
 2000-character fragment of its last turn (WO-021, ask #25 — designed by the
